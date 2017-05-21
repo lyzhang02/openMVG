@@ -19,6 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
+// This file is part of OpenMVG, an Open Multiple View Geometry C++ library.
 
 // Copyright (c) 2012, 2013 Pierre MOULON.
 
@@ -29,10 +30,10 @@
 #ifndef OPENMVG_MULTIVIEW_TWO_VIEW_KERNEL_HPP
 #define OPENMVG_MULTIVIEW_TWO_VIEW_KERNEL_HPP
 
-#include "openMVG/multiview/conditioning.hpp"
-#include "openMVG/numeric/numeric.h"
-
 #include <vector>
+
+#include "openMVG/multiview/conditioning.hpp"
+#include "openMVG/numeric/extract_columns.hpp"
 
 namespace openMVG {
 namespace two_view {
@@ -57,8 +58,8 @@ namespace kernel {
 //
 //   1. Kernel::MAX_MODELS
 //   2. Kernel::MINIMUM_SAMPLES
-//   3. Kernel::Fit(std::vector<size_t>, std::vector<Kernel::Model> *)
-//   4. Kernel::Error(size_t, Model) -> error
+//   3. Kernel::Fit(std::vector<uint32_t>, std::vector<Kernel::Model> *)
+//   4. Kernel::Error(uint32_t, Model) -> error
 //
 // The fit routine must not clear existing entries in the vector of models; it
 // should append new solutions to the end.
@@ -78,14 +79,14 @@ class Kernel {
   enum { MAX_MODELS = Solver::MAX_MODELS };
 
   /// Extract required sample and fit model(s) to the sample
-  void Fit(const std::vector<size_t> &samples, std::vector<Model> *models) const {
+  void Fit(const std::vector<uint32_t> &samples, std::vector<Model> *models) const {
     const Mat
       x1 = ExtractColumns(x1_, samples),
       x2 = ExtractColumns(x2_, samples);
     Solver::Solve(x1, x2, models);
   }
   /// Return the error associated to the model and sample^nth point
-  double Error(size_t sample, const Model &model) const {
+  double Error(uint32_t sample, const Model &model) const {
     return ErrorArg::Error(model, x1_.col(sample), x2_.col(sample));
   }
   /// Number of putative point

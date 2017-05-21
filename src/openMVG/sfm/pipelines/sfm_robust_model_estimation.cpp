@@ -1,3 +1,4 @@
+// This file is part of OpenMVG, an Open Multiple View Geometry C++ library.
 
 // Copyright (c) 2015 Pierre MOULON.
 
@@ -7,12 +8,13 @@
 
 #include "openMVG/sfm/pipelines/sfm_robust_model_estimation.hpp"
 
-#include "openMVG/multiview/projection.hpp"
+#include <array>
+
 #include "openMVG/multiview/solver_essential_kernel.hpp"
 #include "openMVG/multiview/triangulation.hpp"
+#include "openMVG/numeric/numeric.h"
 #include "openMVG/robust_estimation/robust_estimator_ACRansac.hpp"
 #include "openMVG/robust_estimation/robust_estimator_ACRansacKernelAdaptator.hpp"
-#include <array>
 
 namespace openMVG {
 namespace sfm {
@@ -22,16 +24,16 @@ bool estimate_Rt_fromE
   const Mat3X & x1,
   const Mat3X & x2,
   const Mat3 & E,
-  const std::vector<size_t> & vec_inliers,
+  const std::vector<uint32_t> & vec_inliers,
   Mat3 * R,
   Vec3 * t,
-  std::vector<size_t> * vec_selected_points,
+  std::vector<uint32_t> * vec_selected_points,
   std::vector<Vec3> * vec_points,
   const double positive_depth_solution_ratio
 )
 {
   // Accumulator to find the best solution
-  std::array<size_t, 4> f = {0, 0, 0, 0};
+  std::array<uint32_t, 4> f{0, 0, 0, 0};
 
   // Recover plausible rotation and translation from E.
   std::vector<Mat3> Rs;  // Rotation matrix.
@@ -40,7 +42,7 @@ bool estimate_Rt_fromE
 
   // Find which solution is the best:
   // - count how many triangulated observations are in front of the cameras
-  std::vector< std::vector<size_t> > vec_newInliers(Rs.size());
+  std::vector< std::vector<uint32_t> > vec_newInliers(Rs.size());
   std::vector< std::vector<Vec3> > vec_3D(Rs.size());
 
   const Mat34 P1 = HStack(Mat3::Identity(), Vec3::Zero());
@@ -50,7 +52,7 @@ bool estimate_Rt_fromE
     const Mat34 P2 = HStack(Rs[i], ts[i]);
     Vec3 X;
 
-    for (const auto & inlier_it : vec_inliers)
+    for (const uint32_t & inlier_it : vec_inliers)
     {
       const Vec3
         & x1_ = x1.col(inlier_it),
@@ -87,7 +89,7 @@ bool estimate_Rt_fromE
     (*vec_points) = vec_3D[index];
 
   // Test if the best solution is good by using the ratio of the two best solution score
-  std::array<size_t,4> f_sorted (f);
+  std::array<uint32_t,4> f_sorted (f);
   std::sort(f_sorted.begin(), f_sorted.end());
   const double ratio = f_sorted[2] / static_cast<double>(f_sorted[3]);
   return (ratio < positive_depth_solution_ratio);

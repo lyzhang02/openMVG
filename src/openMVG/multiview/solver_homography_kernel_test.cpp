@@ -19,6 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
+// This file is part of OpenMVG, an Open Multiple View Geometry C++ library.
 
 // Copyright (c) 2012, 2013 Pierre MOULON.
 
@@ -60,7 +61,7 @@ TEST(HomographyKernelTest, Fitting_Unnormalized) {
 
     homography::kernel::UnnormalizedKernel kernel(x, y);
 
-    vector<size_t> samples = {0,1,2,3,4};
+    vector<uint32_t> samples = {0,1,2,3,4};
     for (
       Mat::Index j = 4;
       static_cast<Mat::Index>(samples.size()) < x.cols();
@@ -100,7 +101,7 @@ TEST(HomographyKernelTest, Fitting_Normalized) {
 
     homography::kernel::Kernel kernel(x, y);
 
-    vector<size_t> samples = {0,1,2,3,4};
+    vector<uint32_t> samples = {0,1,2,3,4};
     for (
       Mat::Index j = 4;
       static_cast<Mat::Index>(samples.size()) < x.cols();

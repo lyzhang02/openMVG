@@ -19,6 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
+// This file is part of OpenMVG, an Open Multiple View Geometry C++ library.
 
 // Copyright (c) 2012, 2013 Pierre MOULON.
 
@@ -30,9 +31,11 @@
 #include "openMVG/multiview/projection.hpp"
 #include "openMVG/multiview/solver_essential_kernel.hpp"
 #include "openMVG/multiview/test_data_sets.hpp"
+#include "openMVG/numeric/numeric.h"
 
 #include "testing/testing.h"
 
+#include <numeric>
 using namespace openMVG;
 
 /// Check that the E matrix fit the Essential Matrix properties
@@ -85,7 +88,7 @@ TEST(EightPointsRelativePose, EightPointsRelativePose_Kernel_IdFocal) {
       // Check that E holds the essential matrix constraints.
       EXPECT_ESSENTIAL_MATRIX_PROPERTIES(Es[nModel], 1e-8);
 
-      // Check that we find the correct relative orientation.
+      // Check that we find the correct relative orientation.c
       if (FrobeniusDistance(R, Rs[nModel]) < 1e-3
         && (t / t.norm() - ts[nModel] / ts[nModel].norm()).norm() < 1e-3 ) {
           bsolution_found = true;
@@ -119,7 +122,7 @@ TEST(EightPointsRelativePose, EightPointsRelativePose_Kernel) {
     const Mat x1 = d._x[(i+1)%iNviews];
 
     Kernel kernel(x0, x1, d._K[i], d._K[(i+1)%iNviews]);
-    std::vector<size_t> samples(Kernel::MINIMUM_SAMPLES);
+    std::vector<uint32_t> samples(Kernel::MINIMUM_SAMPLES);
     std::iota(samples.begin(), samples.end(), 0);
     kernel.Fit(samples, &Es);
 
@@ -171,7 +174,7 @@ TEST(FivePointKernelTest, KernelError) {
   Kernel kernel(x1,x2, Mat3::Identity(), Mat3::Identity());
 
   bool bOk = true;
-  std::vector<size_t> samples(x1.cols());
+  std::vector<uint32_t> samples(x1.cols());
   std::iota(samples.begin(), samples.end(), 0);
   std::vector<Mat3> Es;
   kernel.Fit(samples, &Es);
@@ -207,7 +210,7 @@ TEST(FivePointKernelTest, FivePointsRelativePose_Kernel) {
     const Mat x1 = d._x[i];
 
     Kernel kernel(x0, x1, d._K[0], d._K[1]);
-    std::vector<size_t> samples(Kernel::MINIMUM_SAMPLES);
+    std::vector<uint32_t> samples(Kernel::MINIMUM_SAMPLES);
     std::iota(samples.begin(), samples.end(), 0);
     kernel.Fit(samples, &Es);
 

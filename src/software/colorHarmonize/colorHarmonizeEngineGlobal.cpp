@@ -1,3 +1,4 @@
+// This file is part of OpenMVG, an Open Multiple View Geometry C++ library.
 
 // Copyright (c) 2013, 2014 openMVG authors.
 
@@ -8,7 +9,7 @@
 #include "colorHarmonizeEngineGlobal.hpp"
 #include "software/SfM/SfMIOHelper.hpp"
 
-#include "openMVG/image/image.hpp"
+#include "openMVG/image/image_io.hpp"
 //-- Feature matches
 #include <openMVG/matching/indMatch.hpp>
 #include "openMVG/matching/indMatch_utils.hpp"
@@ -30,7 +31,7 @@
 
 #include "openMVG/system/timer.hpp"
 
-#include "third_party/progress/progress.hpp"
+#include "third_party/progress/progress_display.hpp"
 
 #include <numeric>
 #include <iomanip>
@@ -336,14 +337,9 @@ bool ColorHarmonizationEngineGlobal::Process()
 
   openMVG::system::Timer timer;
 
-  #ifdef OPENMVG_HAVE_MOSEK
-  using SOLVER_LP_T = MOSEK_SolveWrapper;
-  #else
-  using SOLVER_LP_T = OSI_CLP_SolverWrapper;
-  #endif
   // Red channel
   {
-    SOLVER_LP_T lpSolver(vec_solution_r.size());
+    OSI_CLP_SolverWrapper lpSolver(vec_solution_r.size());
 
     ConstraintBuilder_GainOffset cstBuilder(map_relativeHistograms[0], vec_indexToFix);
     LP_Constraints_Sparse constraint;
@@ -354,7 +350,7 @@ bool ColorHarmonizationEngineGlobal::Process()
   }
   // Green channel
   {
-    SOLVER_LP_T lpSolver(vec_solution_g.size());
+    OSI_CLP_SolverWrapper lpSolver(vec_solution_g.size());
 
     ConstraintBuilder_GainOffset cstBuilder(map_relativeHistograms[1], vec_indexToFix);
     LP_Constraints_Sparse constraint;
@@ -365,7 +361,7 @@ bool ColorHarmonizationEngineGlobal::Process()
   }
   // Blue channel
   {
-    SOLVER_LP_T lpSolver(vec_solution_b.size());
+    OSI_CLP_SolverWrapper lpSolver(vec_solution_b.size());
 
     ConstraintBuilder_GainOffset cstBuilder(map_relativeHistograms[2], vec_indexToFix);
     LP_Constraints_Sparse constraint;
