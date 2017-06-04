@@ -17,7 +17,6 @@ endif()
 # ==============================================================================
 # OpenMVG build options
 # ==============================================================================
-option(OpenMVG_BUILD_LAB801 "Build Lab exe" ON)
 option(OpenMVG_BUILD_SHARED "Build OpenMVG shared libs" OFF)
 option(OpenMVG_BUILD_TESTS "Build OpenMVG tests" OFF)
 option(OpenMVG_BUILD_DOC "Build OpenMVG documentation" ON)
