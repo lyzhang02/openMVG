@@ -80,6 +80,12 @@ namespace Lab {
             return;
         }
 
+        /*
+        *  检验 选择pose编号正确
+        *  输出到path下
+        *  内容格式
+        *  从零开始的编号 原始pose编号 原始图像名称
+        */
         void Lab::Helper::check_labdata_choose_pose(const Lab::LabData& lab_data, const string& path) {
             std::ofstream out(path);
             if (!out.is_open()) {
@@ -92,6 +98,32 @@ namespace Lab {
                 out << iter->second << std::endl;
             }
             out.close();
+            return;
+        }
+
+        /*
+        *  检查直线提取是否正确
+        *  在原图上显示出选择的直线
+        *  tempPath, 存放截图信息的文件夹
+        */
+        void check_line_choose(const Lab::LabData &lab_data, const string &tempPath) {
+            cv::namedWindow("check line", cv::WINDOW_NORMAL);
+            for (const auto &e : lab_data.pose_line_zero) {
+                int originPose = lab_data.chosen_to_pose.at(e.first);
+                string imageName = lab_data.pose_name.at(originPose);
+                cv::Mat image = cv::imread(lab_data.image_path + imageName);
+                std::ifstream read_in(tempPath + imageName + ".txt");
+                if (!read_in.is_open()) {
+                    std::cerr << "txt open error in check_lin_choose.\n";
+                    return;
+                }
+                cv::Point2f leftUp;
+                read_in >> leftUp.x >> leftUp.y;
+                read_in.close();
+                cv::line(image, e.second.getStartPoint() + leftUp, e.second.getEndPoint() + leftUp, { 0, 0, 255 }, 2);
+                cv::imshow("check line", image);
+                cv::waitKey();
+            }
             return;
         }
     }

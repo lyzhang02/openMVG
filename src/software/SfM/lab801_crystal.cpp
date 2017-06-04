@@ -124,38 +124,32 @@ namespace Lab {
             return true;
         }
 
-
-        class ColorTable {
-        public:
-            const static int table_size = 5;
-            cv::Scalar color[table_size]{ {0,0,255},{255,0,255},{0,255,0},{255,255,0},{0,255,255} };
-        };
-
-        /* 在图像上绘制直线
-        *  输入 images 图像集合
-        *  输入 lines 直线集合
-        *  imges和lines对应
+        /*
+        * 直线选择，显示绘制有直线的截图
+        * 选择所需编号, 保存在labData中的pose_line_zero
         */
-        void draw_lines(vector<Mat>& images, vector<vector<KeyLine>>& lines) {
+        void choose_line(const vector<Mat> &images, const vector<vector<KeyLine>> &lines,  LabData &labData) {
             for (int i = 0; i < images.size(); ++i) {
-                //Mat dst;
-                cv::line_descriptor::drawKeylines(images[i], lines[i], images[i]);
-                cv::imshow("line", images[i]);
-                cv::waitKey();
+                string winName = std::to_string(i);
+                cv::namedWindow(winName, cv::WINDOW_NORMAL);
+                cv::imshow(winName, images[i]);
+                cv::waitKey(0);
             }
+
+            std::cout << "选择直线:\n";
+            for (int i = 0; i < images.size(); ++i) {
+                int n = 0;
+                int lineSize = lines[i].size();
+                std::cin >> n;
+                if (n > 0) {
+                    n = (n > lineSize) ? lineSize : n;
+                    labData.pose_line_zero[i] = lines[i][lineSize - n];
+                }
+            }
+            //cv::destroyAllWindows();
             return;
         }
 
-        void draw_lines(Mat image, const vector<KeyLine> &lines) {
-            ColorTable color;
-            for (int i = lines.size() - 1; i >= 0; ++i) {
-                cv::Point pt1{ lines[i].getStartPoint() };
-                cv::Point pt2{ lines[i].getEndPoint() };
-                cv::line(image, pt1, pt2, color.color[i % ColorTable::table_size], 2);
-                //cv::line(image, pt1, pt2, { 0, 0, 255 }, 2);
-                cv::putText(image, std::to_string(lines.size() - i), (pt1 + pt2) / 2, cv::FONT_HERSHEY_SIMPLEX , 1, color.color[i % ColorTable::table_size], 2);
-            }
-        }
     } //! UserInterface
 
 
@@ -183,7 +177,7 @@ namespace Lab {
     *   利用最小堆排序出前longK个最长的直线
     *   输入 allLine， 一幅图像中提取出的所有直线
     *   输入 longK， 最终留下的直线数量
-    *   输出， outLine， 筛选出的前longK长的直线
+    *   输出， outLine， 筛选出的前longK长的直线 outline.back()最长
     */
     void topKLines(const vector<KeyLine>& allLine, vector<KeyLine>& outLine, int longK) {
         std::priority_queue<KeyLine, vector<KeyLine>, LineCompare> longLine;
@@ -233,4 +227,45 @@ namespace Lab {
         }
         return;
     }
+
+
+
+    class ColorTable {//预先声明的颜色表
+    public:
+        const static int table_size = 5;
+        cv::Scalar color[table_size]{ { 0,0,255 },{ 255,0,255 },{ 0,255,0 },{ 255,255,0 },{ 0,255,255 } };
+    };
+
+    /* 在图像上绘制直线
+    *  输入 images 图像集合
+    *  输入 lines 直线集合
+    *  imges和lines对应
+    */
+    void draw_lines(vector<Mat>& images, vector<vector<KeyLine>>& lines) {
+        for (int i = 0; i < images.size(); ++i) {
+            //Mat dst;
+            cv::line_descriptor::drawKeylines(images[i], lines[i], images[i]);
+            cv::imshow("line", images[i]);
+            cv::waitKey();
+        }
+        return;
+    }
+
+
+    /*
+    *  在图像上绘制直线 针对单幅图片
+    *  输入 image 图像
+    *  输入 需要绘制的直线
+    */
+    void draw_lines(const Mat &image, const vector<KeyLine> &lines) {
+        ColorTable color;
+        for (int i = 0; i < lines.size(); ++i) {
+            cv::Point pt1{ lines[i].getStartPoint() };
+            cv::Point pt2{ lines[i].getEndPoint() };
+            cv::line(image, pt1, pt2, color.color[i % ColorTable::table_size], 2);
+            //cv::line(image, pt1, pt2, { 0, 0, 255 }, 2);
+            cv::putText(image, std::to_string(lines.size() - i), (pt1 + pt2) / 2, cv::FONT_HERSHEY_SIMPLEX, 1, color.color[i % ColorTable::table_size], 2);
+        }
+    }
+
 }

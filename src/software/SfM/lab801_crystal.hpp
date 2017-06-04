@@ -33,11 +33,32 @@ namespace Lab {
         */
         bool capture_picture(const string& winName, const string& picPath, const string& picName, const string& outPutPath);
 
-       
-        void draw_lines(vector<Mat>& images, vector<vector<KeyLine>>& lines);
-        void draw_lines(Mat image, const vector<KeyLine> &lines);
+        /*
+        * 按照图示编号选择直线
+        * 输入 images，进行直线提取的图像
+        * 输入 lines，对应每一张图提取出的直线集合
+        * 选择的编号保存在labData中
+        */
+        void choose_line(const vector<Mat>& images, const vector<vector<KeyLine>> &lines, LabData &labData);
     }
+
+    /*
+    * 在image上绘制直线， image是进行直线提取的图像，lines 在该图像上提出的直线集合
+    */
+    void draw_lines(const Mat &image, const vector<KeyLine> &lines);
+    /*
+    * 调用drawKeyline绘制直线
+    */
+    void draw_lines(vector<Mat>& images, vector<vector<KeyLine>>& lines);
+
+    /*
+    * 直线检测
+    * 输入 images， 进行直线检测的所有图
+    * 输入 longK， 保留的最长直线数量
+    * 输出 lines， 对应每一张图检测的直线集合
+    */
     void detect_line(vector<Mat>& images, vector<vector<KeyLine>>& lines, int longK);
+    //void detect_line(const Mat& image, vector<KeyLine> &lines, int longK);
 }
 
 //#endif

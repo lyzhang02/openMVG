@@ -147,7 +147,6 @@ namespace Lab{
     */
     Eigen::Matrix3d average_rotation(const unordered_map<int, Eigen::Matrix3d>& matrix_r, const string& outFile) {
         Eigen::Vector3d vec(0.0, 0.0, 0.0);
-        //ofstream out("D:/a.txt");
         vector<Eigen::Vector3d> t;
         t.reserve(matrix_r.size());
         for (const auto& e : matrix_r) {
@@ -182,7 +181,7 @@ namespace Lab{
 
     /*
     * 将传感器的朝向矩阵和图像Pose的朝向矩阵连接起来
-    * 输入：lab_data  管理用到到数据的对象
+    * 输入：lab_data  管理用到到数据的对象 pose_sfm_rotations & pose_sensor_rotation
     * 输出：Matrix3d 3*3 矩阵
     */
     Eigen::Matrix3d compute_mapping(const LabData& lab_data) {

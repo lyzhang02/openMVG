@@ -11,7 +11,7 @@
 #include "map"
 #include "fstream"
 #include "iostream"
-
+#include <opencv2/line_descriptor.hpp>
 /*
 * 正交旋转矩阵计算相关函数在此头文件内
 * 包括
@@ -36,12 +36,15 @@ namespace Lab {
         unordered_map<int, Eigen::Matrix<double, 3, 3>> pose_sfm_rotation;
             //计算成功的pose编号 与 传感器信息的映射
         unordered_map<int, Eigen::Matrix<double, 3, 3>> pose_sensor_rotation;
-            //选择进行后续计算的pose从0开始编号 与 原始pose编号的映射
+            //选择进行后续计算的pose从0开始序号 与 原始pose编号的映射
         map<int, int> chosen_to_pose;
+            //选择进行后续计算的pose从0开始序号（同chosen_to_pose的key，不是原始pose编号），与 选定直线编号之间的映射
+        unordered_map<int, cv::line_descriptor::KeyLine> pose_line_zero;
             //计算成功的pose编号 与 图片名称之间的映射
         unordered_map<int, string> pose_name;
             //计算成功的pose编号 与 传感器 GPS 的映射
         unordered_map<int, Eigen::Vector3d> pose_gps;
+
 
     };
     
