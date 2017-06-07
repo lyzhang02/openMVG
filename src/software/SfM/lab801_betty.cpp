@@ -93,8 +93,8 @@ namespace Lab {
                 return;
             }
             for (const auto& e : lab_data.chosen_to_pose) {
-                out << e.first << ' ' << e.second << ' ';
-                const auto iter = lab_data.pose_name.find(e.second);
+                out << e <<  ' ';
+                const auto iter = lab_data.pose_name.find(e);
                 out << iter->second << std::endl;
             }
             out.close();
@@ -108,19 +108,10 @@ namespace Lab {
         */
         void check_line_choose(const Lab::LabData &lab_data, const string &tempPath) {
             cv::namedWindow("check line", cv::WINDOW_NORMAL);
-            for (const auto &e : lab_data.pose_line_zero) {
-                int originPose = lab_data.chosen_to_pose.at(e.first);
-                string imageName = lab_data.pose_name.at(originPose);
+            for (const auto &e : lab_data.pose_line) {
+                string imageName = lab_data.pose_name.at(e.first);
                 cv::Mat image = cv::imread(lab_data.image_path + imageName);
-                std::ifstream read_in(tempPath + imageName + ".txt");
-                if (!read_in.is_open()) {
-                    std::cerr << "txt open error in check_lin_choose.\n";
-                    return;
-                }
-                cv::Point2f leftUp;
-                read_in >> leftUp.x >> leftUp.y;
-                read_in.close();
-                cv::line(image, e.second.getStartPoint() + leftUp, e.second.getEndPoint() + leftUp, { 0, 0, 255 }, 2);
+                cv::line(image, e.second.getStartPoint(), e.second.getEndPoint(), { 0, 0, 255 }, 2);
                 cv::imshow("check line", image);
                 cv::waitKey();
             }

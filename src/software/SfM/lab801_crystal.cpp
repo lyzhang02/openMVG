@@ -19,15 +19,17 @@ namespace Lab {
             std::cin >> n;
             if (n < 3)
                 return false;
-            std::vector<int> pose_chosen;
-            pose_chosen.reserve(n);
+            //std::vector<int> pose_chosen;
+            //pose_chosen.reserve(n);
             int c_pose = 0;
             for (int i = 0; i < n; ++i) {
                 std::cin >> c_pose;
-                pose_chosen.push_back(c_pose);
+                //pose_chosen.push_back(c_pose);
+                lab_data.chosen_to_pose.insert(c_pose);
             }
-            std::sort(pose_chosen.begin(), pose_chosen.end());
-            return initial_chosen_to_pose(lab_data, pose_chosen);
+            //std::sort(pose_chosen.begin(), pose_chosen.end());
+            //return initial_chosen_to_pose(lab_data, pose_chosen);
+            return true;
         }
 
 
@@ -137,7 +139,18 @@ namespace Lab {
             }
 
             std::cout << "Ñ¡ÔñÖ±Ïß:\n";
-            for (int i = 0; i < images.size(); ++i) {
+            int i = 0;
+            for (const auto &e : labData.chosen_to_pose) {
+                int n = 0;
+                int lineSize = lines[i].size();
+                std::cin >> n;
+                if (n > 0) {
+                    n = (n > lineSize) ? lineSize : n;
+                    labData.pose_line[e] = lines[i][lineSize - n];
+                }
+                ++i;
+            }
+            /*for (int i = 0; i < images.size(); ++i) {
                 int n = 0;
                 int lineSize = lines[i].size();
                 std::cin >> n;
@@ -145,6 +158,9 @@ namespace Lab {
                     n = (n > lineSize) ? lineSize : n;
                     labData.pose_line_zero[i] = lines[i][lineSize - n];
                 }
+            }*/
+            if (labData.pose_line.size() < 3) {
+                std::cerr << "less than 3, error in choose_line.\n";
             }
             //cv::destroyAllWindows();
             return;
@@ -268,4 +284,23 @@ namespace Lab {
         }
     }
 
+    void line_origin_image(Lab::LabData &lab_data, const string &tempPath) {
+        for (auto &originPose_line : lab_data.pose_line) {
+            //int originPose = lab_data.chosen_to_pose.at(e.first);
+            string imageName = lab_data.pose_name.at(originPose_line.first);
+            std::ifstream read_in(tempPath + imageName + ".txt");
+            if (!read_in.is_open()) {
+                std::cerr << "txt open error in check_lin_choose.\n";
+                return;
+            }
+            cv::Point2f leftUp;
+            read_in >> leftUp.x >> leftUp.y;
+            read_in.close();
+            originPose_line.second.startPointX += leftUp.x;
+            originPose_line.second.startPointY += leftUp.y;
+            originPose_line.second.endPointX += leftUp.x;
+            originPose_line.second.endPointY += leftUp.y;
+        }
+        return;
+    }
 }

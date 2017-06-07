@@ -196,4 +196,20 @@ namespace Lab{
         Eigen::Matrix3d m = average_rotation(product_rotation, lab_data.root_path + "temp/decomposition.txt");
         return m;
     }
+
+    /*
+    * 收集 选定直线的pose的P矩阵信息 
+    */
+
+    void read_P(LabData &lab_data, const SfM_Data &sfm_data) {
+
+        for (const auto &e : lab_data.pose_line) {
+            //std::shared_ptr<openMVG::sfm::View> view = sfm_data.GetViews().at(originPose);
+            std::shared_ptr<openMVG::cameras::IntrinsicBase> intrinsic = sfm_data.GetIntrinsics().at(e.first);
+            //openMVG::geometry::Pose3 pose = sfm_data.GetPoseOrDie(view.get());
+            openMVG::geometry::Pose3 pose = sfm_data.poses.at(e.first);
+            openMVG::Mat34 p = intrinsic->get_projective_equivalent(pose);
+            lab_data.pose_P.insert({ e.first, p}); //插入pose编号，对应的camera matrix
+        }
+    }
 }

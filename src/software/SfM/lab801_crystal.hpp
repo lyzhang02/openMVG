@@ -59,6 +59,8 @@ namespace Lab {
     */
     void detect_line(vector<Mat>& images, vector<vector<KeyLine>>& lines, int longK);
     //void detect_line(const Mat& image, vector<KeyLine> &lines, int longK);
+
+    void line_origin_image(Lab::LabData &lab_data, const string &tempPath);
 }
 
 //#endif

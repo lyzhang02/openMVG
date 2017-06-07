@@ -20,7 +20,7 @@
 #include "lab801_allen.hpp"
 #include "lab801_betty.hpp"
 #include "lab801_crystal.hpp"
-
+#include "lab801_diana.hpp"
 using namespace openMVG::sfm;
 using cv::line_descriptor::KeyLine;
 using std::vector;
@@ -85,7 +85,8 @@ int main(int argc, char **argv) {
     cv::namedWindow("show", cv::WINDOW_NORMAL); //截图窗口
     //对选择的pose对应的图像进行截图
     for (const auto& k : lab_data.chosen_to_pose) {
-        const auto iter = lab_data.pose_name.find(k.second);
+        //const auto iter = lab_data.pose_name.find(k.second);
+        const auto iter = lab_data.pose_name.find(k);
         Lab::UserInterface::capture_picture("show", lab_data.image_path, iter->second, tempPath);
     }
     cv::destroyWindow("show");
@@ -95,7 +96,8 @@ int main(int argc, char **argv) {
     vector<Mat> images; //images 存储截图后的子图片
     images.reserve(lab_data.chosen_to_pose.size());
     for (const auto& k : lab_data.chosen_to_pose) {
-        const auto iter = lab_data.pose_name.find(k.second);
+        //const auto iter = lab_data.pose_name.find(k.second);
+        const auto iter = lab_data.pose_name.find(k);
         images.push_back(cv::imread(tempPath + iter->second + ".jpg"));
     }
 
@@ -108,14 +110,18 @@ int main(int argc, char **argv) {
 
     // 观察绘制的直线，选择每张图上对应直线
     Lab::UserInterface::choose_line(images, lines, lab_data);
-
-    {// 将选择的直线绘制到原始大图片上，检测是否对应正确
-        Lab::Helper::check_line_choose(lab_data, lab_data.root_path + "temp/");
-    }
+    Lab::line_origin_image(lab_data, lab_data.root_path + "temp/");
+    //{// 将选择的直线绘制到原始大图片上，检测是否对应正确
+    //    Lab::Helper::check_line_choose(lab_data, lab_data.root_path + "temp/");
+    //}
     // ----------------！直线检测过程-----------------
 
     vector<Mat>{}.swap(images); //清空
     vector<vector<KeyLine>>{}.swap(lines);
 
+    Lab::read_P(lab_data, my_sfm_data);
+    //vector<Matrix<double, 6, 1 >, Eigen::aligned_allocator<Matrix<double, 6, 1> > > outPluckerLine;
+    Lab::vectorVec61d outPluckerLine;
+    Lab::reconstruction_line_Linear(my_sfm_data, lab_data, 3, outPluckerLine);
     return 0;
 }
