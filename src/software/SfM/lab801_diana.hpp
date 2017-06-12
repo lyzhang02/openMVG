@@ -7,6 +7,10 @@
 #include "lab801_allen.hpp"
 #include "opencv2/line_descriptor.hpp"
 #include "eigen\Dense"
+
+/*
+* 此文件声明进行三角交汇的函数
+*/
 using std::vector;
 using cv::line_descriptor::KeyLine;
 using Eigen::Matrix;

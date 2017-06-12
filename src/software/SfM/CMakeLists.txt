@@ -9,7 +9,9 @@ if (OpenMVG_BUILD_LAB801)
             lab801_allen.cpp lab801_allen.hpp
             lab801_betty.hpp lab801_betty.cpp
             lab801_crystal.hpp lab801_crystal.cpp
-            lab801_diana.hpp lab801_diana.cpp)
+            lab801_diana.hpp lab801_diana.cpp
+            lab801_eric.hpp lab801_eric.cpp
+            lab801_felix.hpp lab801_felix.cpp)
 
         add_executable(openMVG_main_lab801 ${openMVG_main_lab801_source})
         target_link_libraries(openMVG_main_lab801

@@ -2,7 +2,8 @@
 //#define _LAB_801_CRYSTAL_H
 
 /*
-*   此头文件声明交互相关的函数
+* 此头文件声明交互相关的函数
+* 需要窗口操作，如控制台读取，opencv窗口截图
 */
 #pragma once
 #include <vector>

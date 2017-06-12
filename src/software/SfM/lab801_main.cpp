@@ -21,6 +21,7 @@
 #include "lab801_betty.hpp"
 #include "lab801_crystal.hpp"
 #include "lab801_diana.hpp"
+#include "lab801_eric.hpp"
 using namespace openMVG::sfm;
 using cv::line_descriptor::KeyLine;
 using std::vector;
@@ -129,7 +130,10 @@ int main(int argc, char **argv) {
 
     vector<pair<cv::Point3d, cv::Point3d> > outPoint;
     Lab::reconstruction_lineLinear(my_sfm_data, lab_data, 3, outPoint);
-    Lab::Helper::check_line_point_3d(outPoint, lab_data.root_path + "temp/in.txt");
+   
     Lab::Helper::check_line_point_3d(outPointLine, lab_data.root_path + "temp/out.txt");
+    Lab::mapPoint(lab_data.mapping, outPoint);
+    Lab::Helper::check_line_point_3d(outPoint, lab_data.root_path + "temp/in.txt");
+    Lab::computeAngle(outPoint, lab_data.root_path + "temp/angle.txt");
     return 0;
 }

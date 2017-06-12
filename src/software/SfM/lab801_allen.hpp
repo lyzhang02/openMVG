@@ -3,6 +3,14 @@
 
 #pragma once
 
+/*
+* 正交旋转矩阵计算相关函数在此头文件内
+* 包括
+*   读取sfm估计的pose，读取文本记录的sensor信息
+*   两组矩阵的合成， 矩阵到eular角度的分解
+*   eular角度合成单位正交矩阵
+*/
+
 #include "openMVG\sfm\sfm.hpp"
 #include "openMVG\sfm\sfm_data.hpp"
 #include "vector"
@@ -13,13 +21,7 @@
 #include "iostream"
 #include <memory>
 #include <opencv2/line_descriptor.hpp>
-/*
-* 正交旋转矩阵计算相关函数在此头文件内
-* 包括
-*   读取sfm估计的pose，读取文本记录的sensor信息
-*   两组矩阵的合成， 矩阵到eular角度的分解
-*   eular角度合成单位正交矩阵
-*/
+
 using namespace openMVG::sfm;
 using namespace std;
 namespace Lab {
