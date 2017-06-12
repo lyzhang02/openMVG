@@ -122,6 +122,14 @@ int main(int argc, char **argv) {
     Lab::read_P(lab_data, my_sfm_data);
     //vector<Matrix<double, 6, 1 >, Eigen::aligned_allocator<Matrix<double, 6, 1> > > outPluckerLine;
     Lab::vectorVec61d outPluckerLine;
-    Lab::reconstruction_line_Linear(my_sfm_data, lab_data, 3, outPluckerLine);
+    Lab::reconstruction_lineLinear(my_sfm_data, lab_data, 3, outPluckerLine);
+    vector<pair<cv::Point3d, cv::Point3d>> outPointLine;
+    outPointLine.reserve(outPluckerLine.size());
+    Lab::plucker2Point(outPluckerLine, outPointLine);
+
+    vector<pair<cv::Point3d, cv::Point3d> > outPoint;
+    Lab::reconstruction_lineLinear(my_sfm_data, lab_data, 3, outPoint);
+    Lab::Helper::check_line_point_3d(outPoint, lab_data.root_path + "temp/in.txt");
+    Lab::Helper::check_line_point_3d(outPointLine, lab_data.root_path + "temp/out.txt");
     return 0;
 }

@@ -117,5 +117,19 @@ namespace Lab {
             }
             return;
         }
+
+
+        void check_line_point_3d(const vector<std::pair<cv::Point3d, cv::Point3d> >&pointLine, const string &path) {
+            std::ofstream out(path);
+            if (!out.is_open()) {
+                std::cerr << "file openning error in check_line_point3d";
+                return;
+            }
+            for (const auto &e : pointLine) {
+                out << e.first << ' ' << e.second << '\n';
+            }
+            out.close();
+            return;
+        }
     }
 }

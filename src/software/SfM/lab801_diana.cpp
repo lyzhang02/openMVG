@@ -32,7 +32,11 @@ namespace Lab {
         return;
     }
 
-
+    /*
+    @ 计算离（a,b)最近的满足正交关系的 （a~，b~）
+    @ Structure—From-Motion Using Lines： Representation，Triangulation， and Bundle Adjustment
+    @ Adrien Bartoli， Peter Sturm
+    */
     void pluckerCorrection(Matrix<double, 6, 1> &pluckerLine) {
         Eigen::MatrixXd ab(3,2);
         ab << pluckerLine(0), pluckerLine(3),
@@ -61,6 +65,13 @@ namespace Lab {
 
     }
 
+
+    /*
+    @ 对一组2d直线进行3d直线计算
+    @ input POneGroup 这组直线所在各自图像的camera matrix
+    @ input lineOneGroup 这组直线在各自像上的起点和终点
+    @ output 6*1 double向量，表示3d直线
+    */
     //!!此处没有将直线的两个端点按照vector<pair<Vector2d,Vector2d>> 保存，因为不确定是否需要指定allocator
     Matrix<double, 6, 1> reconstructure_from_group_line(vectorMat34d &POneGroup, vector<Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> > &lineOneGroup) {
         int n = POneGroup.size();
@@ -87,22 +98,30 @@ namespace Lab {
         Eigen::JacobiSVD<Eigen::MatrixXd> svdSolver(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
         Matrix<double, 6, 1> minEigenVector;
         minEigenVector << svdSolver.matrixV().block<6, 1>(0, 5);
+        pluckerCorrection(minEigenVector);
         return minEigenVector;
         
     }
 
-    void reconstruction_line_Linear(const SfM_Data &sfm_data, const LabData &lab_data, int groupSize, 
+    /*
+    @ 直线恢复 overload
+    @ input   groupSize 每组选用的直线数量
+    @ output  outPluckerLine plucker坐标表示的3D直线
+    */
+    void reconstruction_lineLinear(const SfM_Data &sfm_data, const LabData &lab_data, int groupSize, 
         vectorVec61d &outPluckerLine) {
         if (groupSize < 2)
             return;
         vector<vector<int>> group;
-        generateGroup(lab_data, groupSize, group);
+        generateGroup(lab_data, groupSize, group);  
         outPluckerLine.reserve(group.size());
         for (const auto &e : group) {
             vectorMat34d POneGroup;
             POneGroup.reserve(groupSize); //每组pose的camera matrix
             vector<Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> >  lineOneGroup; //每组pose选定的line
             lineOneGroup.reserve(groupSize * 2);
+
+            //收集每组计算用到的2d直线起点和终点
             for (const auto &k : e) {
                 POneGroup.push_back(lab_data.pose_P.at(k)); // 一个分组内的groupSize个 camera matrix
 
@@ -118,10 +137,54 @@ namespace Lab {
                 lineOneGroup.push_back(undistortStartPoint);
                 lineOneGroup.push_back(undistortEndPoint);
             }
+
+            //对一组2d直线进行方程求解，得到一条3d直线
             Matrix<double, 6,1 > pluckerLine = reconstructure_from_group_line(POneGroup, lineOneGroup);
-            pluckerCorrection(pluckerLine);
+            //pluckerCorrection(pluckerLine);  //plucker矫正，使（a,b) 满足正交条件
+            outPluckerLine.push_back(pluckerLine); //保存到输出当中
+        }
+        return;
+    }
+
+
+    /* 
+    @ 直线恢复 overload
+    @ input   groupSize 每组选用的直线数量
+    @ output  outPointLine 3d直线在空间中的两点表示，（x1,y1,0) （x2, y2, 1)
+    */
+    void reconstruction_lineLinear(const SfM_Data &sfm_data, const LabData &lab_data, int groupSize, vector<pair<cv::Point3d, cv::Point3d> > &outPointLine) {
+        if (groupSize < 2)
+            return;
+        vector<vector<int>> group;
+        vectorVec61d outPluckerLine;
+        generateGroup(lab_data, groupSize, group);
+        outPluckerLine.reserve(group.size());
+        for (const auto &e : group) {
+            vectorMat34d POneGroup;
+            POneGroup.reserve(groupSize); //每组pose的camera matrix
+            vector<Eigen::Vector2d, Eigen::aligned_allocator<Eigen::Vector2d> >  lineOneGroup; //每组pose选定的line
+            lineOneGroup.reserve(groupSize * 2);
+            for (const auto &k : e) {
+                POneGroup.push_back(lab_data.pose_P.at(k)); // 一个分组内的groupSize个 camera matrix
+
+                                                            //一个分组内groupSize条直线的起点和终点
+                Point2f cvStartPoint = lab_data.pose_line.at(k).getStartPoint();
+                Point2f cvEndPoint = lab_data.pose_line.at(k).getEndPoint();
+                Eigen::Vector2d startPoint{ cvStartPoint.x, cvStartPoint.y };
+                Eigen::Vector2d endPoint{ cvEndPoint.x, cvEndPoint.y };
+                const auto &view = sfm_data.views.at(k);  // view k
+                auto instrinsicSharedPtr = sfm_data.intrinsics.at(view->id_view);
+                auto undistortStartPoint = instrinsicSharedPtr->get_ud_pixel(startPoint); // undistort point
+                auto undistortEndPoint = instrinsicSharedPtr->get_ud_pixel(endPoint);  // undistort point
+                lineOneGroup.push_back(undistortStartPoint);
+                lineOneGroup.push_back(undistortEndPoint);
+            }
+            Matrix<double, 6, 1 > pluckerLine = reconstructure_from_group_line(POneGroup, lineOneGroup);
+            //pluckerCorrection(pluckerLine);
             outPluckerLine.push_back(pluckerLine);
         }
+        outPointLine.reserve(outPluckerLine.size());
+        plucker2Point(outPluckerLine, outPointLine);
         return;
     }
 

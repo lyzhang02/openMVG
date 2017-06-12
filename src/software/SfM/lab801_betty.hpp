@@ -17,6 +17,7 @@ namespace Lab {
         void check_labdata_rotations(const Lab::LabData& lab_data, const string& path);   //输出labdata到path
         void check_labdata_choose_pose(const Lab::LabData& lab_data, const string& path); //输出 选择的pose号到path
         void check_line_choose(const Lab::LabData &lab_data, const string &tempPath);  //查看直线选择是否正确，tempPath存放截图信息的文件夹
+        void check_line_point_3d(const vector<std::pair<cv::Point3d, cv::Point3d> > &pointLine, const string &Path);
     }
 }
 //#endif // !_LAB_801_BETTY_H
