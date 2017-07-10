@@ -204,8 +204,8 @@ namespace Lab{
     void read_P(LabData &lab_data, const SfM_Data &sfm_data) {
 
         for (const auto &e : lab_data.pose_line) {
-            //std::shared_ptr<openMVG::sfm::View> view = sfm_data.GetViews().at(originPose);
-            std::shared_ptr<openMVG::cameras::IntrinsicBase> intrinsic = sfm_data.GetIntrinsics().at(e.first);
+            std::shared_ptr<openMVG::sfm::View> view = sfm_data.GetViews().at(e.first);
+            std::shared_ptr<openMVG::cameras::IntrinsicBase> intrinsic = sfm_data.GetIntrinsics().at(view->id_intrinsic);
             //openMVG::geometry::Pose3 pose = sfm_data.GetPoseOrDie(view.get());
             openMVG::geometry::Pose3 pose = sfm_data.poses.at(e.first);
             openMVG::Mat34 p = intrinsic->get_projective_equivalent(pose);

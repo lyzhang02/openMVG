@@ -27,7 +27,7 @@ namespace Lab {
             a = mapPoint(mapping, e.second);
             e.second = a;
         }
-        std::cout << pointLine.size();
+        //std::cout << pointLine.size();
         return;
     }
 

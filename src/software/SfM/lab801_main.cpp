@@ -22,6 +22,7 @@
 #include "lab801_crystal.hpp"
 #include "lab801_diana.hpp"
 #include "lab801_eric.hpp"
+#include "lab801_felix.hpp"
 using namespace openMVG::sfm;
 using cv::line_descriptor::KeyLine;
 using std::vector;
@@ -103,8 +104,13 @@ int main(int argc, char **argv) {
     }
 
     vector<vector<KeyLine>> lines; //lines存储images中每一张截图中检测到的直线
-    Lab::detect_line(images, lines, 10); //对images中的每一张图进行直线检测，保留前K条长直线，保存在lines
+    /*
+    //直线检测 lsd方法
+    Lab::detect_line(images, lines, 15); //对images中的每一张图进行直线检测，保留前K条长直线，保存在lines
     // 把直线检测的结果绘制到截图上
+    */
+
+    Lab::UserInterface::detect_line_manually(images, lines);
     for (int i = 0; i < images.size(); ++i) {
         Lab::draw_lines(images[i], lines[i]);
     }
@@ -112,9 +118,11 @@ int main(int argc, char **argv) {
     // 观察绘制的直线，选择每张图上对应直线
     Lab::UserInterface::choose_line(images, lines, lab_data);
     Lab::line_origin_image(lab_data, lab_data.root_path + "temp/");
-    //{// 将选择的直线绘制到原始大图片上，检测是否对应正确
-    //    Lab::Helper::check_line_choose(lab_data, lab_data.root_path + "temp/");
-    //}
+    /*
+    {// 将选择的直线绘制到原始大图片上，检测是否对应正确
+        Lab::Helper::check_line_choose(lab_data, lab_data.root_path + "temp/");
+    }
+    */
     // ----------------！直线检测过程-----------------
 
     vector<Mat>{}.swap(images); //清空
@@ -122,18 +130,17 @@ int main(int argc, char **argv) {
 
     Lab::read_P(lab_data, my_sfm_data);
     //vector<Matrix<double, 6, 1 >, Eigen::aligned_allocator<Matrix<double, 6, 1> > > outPluckerLine;
-    Lab::vectorVec61d outPluckerLine;
-    Lab::reconstruction_lineLinear(my_sfm_data, lab_data, 3, outPluckerLine);
-    vector<pair<cv::Point3d, cv::Point3d>> outPointLine;
-    outPointLine.reserve(outPluckerLine.size());
-    Lab::plucker2Point(outPluckerLine, outPointLine);
 
     vector<pair<cv::Point3d, cv::Point3d> > outPoint;
     Lab::reconstruction_lineLinear(my_sfm_data, lab_data, 3, outPoint);
    
-    Lab::Helper::check_line_point_3d(outPointLine, lab_data.root_path + "temp/out.txt");
     Lab::mapPoint(lab_data.mapping, outPoint);
     Lab::Helper::check_line_point_3d(outPoint, lab_data.root_path + "temp/in.txt");
     Lab::computeAngle(outPoint, lab_data.root_path + "temp/angle.txt");
+
+    vector < pair<cv::Point3d, cv::Point3d> >outPoint_1;
+    Lab::reconstrution_linePoint(my_sfm_data, lab_data, 3, outPoint_1);
+    Lab::mapPoint(lab_data.mapping, outPoint_1);
+    Lab::computeAngle(outPoint_1, lab_data.root_path + "temp/angle1.txt");
     return 0;
 }

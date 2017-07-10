@@ -36,6 +36,9 @@ namespace Lab {
     void reconstruction_lineLinear(const SfM_Data &sfm_data, const LabData &lab_data, int groupSize,
         vector<pair<cv::Point3d, cv::Point3d> > &outPointLine);
 
+    void reconstrution_linePoint(const SfM_Data &sfm_data, const LabData &lab_data, int groupSize,
+        vector<pair<cv::Point3d, cv::Point3d> > &outPointLine);
+
     /*
     @ 将3d中6个坐标表示的直线 用两个3d点表示
     @ input plukerLine 多条6坐标直线

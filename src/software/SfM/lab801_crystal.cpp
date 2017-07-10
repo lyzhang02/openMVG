@@ -166,6 +166,42 @@ namespace Lab {
             return;
         }
 
+        void choose_line_manually(const vector<Mat> &images, const vector<vector<KeyLine>> &lines, LabData &labData) {
+            for (int i = 0; i < images.size(); ++i) {
+                string winName = std::to_string(i);
+                cv::namedWindow(winName, cv::WINDOW_NORMAL);
+                cv::imshow(winName, images[i]);
+                cv::waitKey(0);
+            }
+
+            std::cout << "Ñ¡ÔñÖ±Ïß:\n";
+            int i = 0;
+            for (const auto &e : labData.chosen_to_pose) {
+                int n = 0;
+                int lineSize = lines[i].size();
+                std::cin >> n;
+                if (n > 0) {
+                    n = (n > lineSize) ? lineSize : n;
+                    labData.pose_line[e] = lines[i][n];
+                }
+                ++i;
+            }
+            /*for (int i = 0; i < images.size(); ++i) {
+            int n = 0;
+            int lineSize = lines[i].size();
+            std::cin >> n;
+            if (n > 0) {
+            n = (n > lineSize) ? lineSize : n;
+            labData.pose_line_zero[i] = lines[i][lineSize - n];
+            }
+            }*/
+            if (labData.pose_line.size() < 3) {
+                std::cerr << "less than 3, error in choose_line.\n";
+            }
+            //cv::destroyAllWindows();
+            return;
+        }
+
     } //! UserInterface
 
 
@@ -232,7 +268,7 @@ namespace Lab {
         Ptr<LSDDetector> lineDetector = LSDDetector::createLSDDetector();
         vector<KeyLine> temp;
         for (const auto &e : images) {
-            lineDetector->detect(e, temp, 2, 1);
+            lineDetector->detect(e, temp, 2, 3);
             allLines.push_back(std::move(temp));
         }
         

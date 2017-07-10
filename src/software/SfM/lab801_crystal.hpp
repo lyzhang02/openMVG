@@ -41,6 +41,8 @@ namespace Lab {
         * 选择的编号保存在labData中
         */
         void choose_line(const vector<Mat>& images, const vector<vector<KeyLine>> &lines, LabData &labData);
+
+        void choose_line_manually(const vector<Mat>& images, const vector<vector<KeyLine>> &lines, LabData &labData);
     }
 
     /*
