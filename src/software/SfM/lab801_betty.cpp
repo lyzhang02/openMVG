@@ -1,7 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include "lab801_betty.hpp"
-
+#include <direct.h>
 namespace Lab {
     namespace Helper {
 
