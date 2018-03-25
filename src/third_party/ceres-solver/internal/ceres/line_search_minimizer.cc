@@ -63,27 +63,14 @@ namespace ceres {
 namespace internal {
 namespace {
 
-// TODO(sameeragarwal): I think there is a small bug here, in that if
-// the evaluation fails, then the state can contain garbage. Look at
-// this more carefully.
-bool Evaluate(Evaluator* evaluator,
-              const Vector& x,
-              LineSearchMinimizer::State* state,
-              std::string* message) {
-  if (!evaluator->Evaluate(x.data(),
-                           &(state->cost),
-                           NULL,
-                           state->gradient.data(),
-                           NULL)) {
-    *message = "Gradient evaluation failed.";
-    return false;
-  }
-
+bool EvaluateGradientNorms(Evaluator* evaluator,
+                           const Vector& x,
+                           LineSearchMinimizer::State* state,
+                           std::string* message) {
   Vector negative_gradient = -state->gradient;
   Vector projected_gradient_step(x.size());
-  if (!evaluator->Plus(x.data(),
-                       negative_gradient.data(),
-                       projected_gradient_step.data())) {
+  if (!evaluator->Plus(
+          x.data(), negative_gradient.data(), projected_gradient_step.data())) {
     *message = "projected_gradient_step = Plus(x, -gradient) failed.";
     return false;
   }
@@ -116,9 +103,6 @@ void LineSearchMinimizer::Minimize(const Minimizer::Options& options,
   State current_state(num_parameters, num_effective_parameters);
   State previous_state(num_parameters, num_effective_parameters);
 
-  Vector delta(num_effective_parameters);
-  Vector x_plus_delta(num_parameters);
-
   IterationSummary iteration_summary;
   iteration_summary.iteration = 0;
   iteration_summary.step_is_valid = false;
@@ -130,8 +114,19 @@ void LineSearchMinimizer::Minimize(const Minimizer::Options& options,
   iteration_summary.linear_solver_iterations = 0;
   iteration_summary.step_solver_time_in_seconds = 0;
 
-  // Do initial cost and Jacobian evaluation.
-  if (!Evaluate(evaluator, x, &current_state, &summary->message)) {
+  // Do initial cost and gradient evaluation.
+  if (!evaluator->Evaluate(x.data(),
+                           &(current_state.cost),
+                           NULL,
+                           current_state.gradient.data(),
+                           NULL)) {
+    summary->termination_type = FAILURE;
+    summary->message = "Initial cost and jacobian evaluation failed.";
+    LOG_IF(WARNING, is_not_silent) << "Terminating: " << summary->message;
+    return;
+  }
+
+  if (!EvaluateGradientNorms(evaluator, x, &current_state, &summary->message)) {
     summary->termination_type = FAILURE;
     summary->message = "Initial cost and jacobian evaluation failed. "
         "More details: " + summary->message;
@@ -142,9 +137,8 @@ void LineSearchMinimizer::Minimize(const Minimizer::Options& options,
   summary->initial_cost = current_state.cost + summary->fixed_cost;
   iteration_summary.cost = current_state.cost + summary->fixed_cost;
 
-  iteration_summary.gradient_max_norm = current_state.gradient_max_norm;
   iteration_summary.gradient_norm = sqrt(current_state.gradient_squared_norm);
-
+  iteration_summary.gradient_max_norm = current_state.gradient_max_norm;
   if (iteration_summary.gradient_max_norm <= options.gradient_tolerance) {
     summary->message = StringPrintf("Gradient tolerance reached. "
                                     "Gradient max norm: %e <= %e",
@@ -191,6 +185,7 @@ void LineSearchMinimizer::Minimize(const Minimizer::Options& options,
       options.line_search_sufficient_curvature_decrease;
   line_search_options.max_step_expansion =
       options.max_line_search_step_expansion;
+  line_search_options.is_silent = options.is_silent;
   line_search_options.function = &line_search_function;
 
   scoped_ptr<LineSearch>
@@ -325,26 +320,34 @@ void LineSearchMinimizer::Minimize(const Minimizer::Options& options,
       break;
     }
 
-    current_state.step_size = line_search_summary.optimal_step_size;
-    delta = current_state.step_size * current_state.search_direction;
-
+    const FunctionSample& optimal_point = line_search_summary.optimal_point;
+    CHECK(optimal_point.vector_x_is_valid)
+        << "Congratulations, you found a bug in Ceres. Please report it.";
+    current_state.step_size = optimal_point.x;
     previous_state = current_state;
     iteration_summary.step_solver_time_in_seconds =
         WallTimeInSeconds() - iteration_start_time;
 
-    const double x_norm = x.norm();
+    if (optimal_point.vector_gradient_is_valid) {
+      current_state.cost = optimal_point.value;
+      current_state.gradient = optimal_point.vector_gradient;
+    } else {
+      if (!evaluator->Evaluate(optimal_point.vector_x.data(),
+                               &(current_state.cost),
+                               NULL,
+                               current_state.gradient.data(),
+                               NULL)) {
+        summary->termination_type = FAILURE;
+        summary->message = "Cost and jacobian evaluation failed.";
+        LOG_IF(WARNING, is_not_silent) << "Terminating: " << summary->message;
+        return;
+      }
+    }
 
-    if (!evaluator->Plus(x.data(), delta.data(), x_plus_delta.data())) {
-      summary->termination_type = FAILURE;
-      summary->message =
-          "x_plus_delta = Plus(x, delta) failed. This should not happen "
-          "as the step was valid when it was selected by the line search.";
-      LOG_IF(WARNING, is_not_silent) << "Terminating: " << summary->message;
-      break;
-    } else if (!Evaluate(evaluator,
-                         x_plus_delta,
-                         &current_state,
-                         &summary->message)) {
+    if (!EvaluateGradientNorms(evaluator,
+                               optimal_point.vector_x,
+                               &current_state,
+                               &summary->message)) {
       summary->termination_type = FAILURE;
       summary->message =
           "Step failed to evaluate. This should not happen as the step was "
@@ -352,15 +355,18 @@ void LineSearchMinimizer::Minimize(const Minimizer::Options& options,
           summary->message;
       LOG_IF(WARNING, is_not_silent) << "Terminating: " << summary->message;
       break;
-    } else {
-      x = x_plus_delta;
     }
+
+    // Compute the norm of the step in the ambient space.
+    iteration_summary.step_norm = (optimal_point.vector_x - x).norm();
+    const double x_norm = x.norm();
+    x = optimal_point.vector_x;
 
     iteration_summary.gradient_max_norm = current_state.gradient_max_norm;
     iteration_summary.gradient_norm = sqrt(current_state.gradient_squared_norm);
     iteration_summary.cost_change = previous_state.cost - current_state.cost;
     iteration_summary.cost = current_state.cost + summary->fixed_cost;
-    iteration_summary.step_norm = delta.norm();
+
     iteration_summary.step_is_valid = true;
     iteration_summary.step_is_successful = true;
     iteration_summary.step_size =  current_state.step_size;
@@ -375,7 +381,15 @@ void LineSearchMinimizer::Minimize(const Minimizer::Options& options,
     iteration_summary.cumulative_time_in_seconds =
         WallTimeInSeconds() - start_time
         + summary->preprocessor_time_in_seconds;
+    summary->iterations.push_back(iteration_summary);
 
+    // Iterations inside the line search algorithm are considered
+    // 'steps' in the broader context, to distinguish these inner
+    // iterations from from the outer iterations of the line search
+    // minimizer. The number of line search steps is the total number
+    // of inner line search iterations (or steps) across the entire
+    // minimization.
+    summary->num_line_search_steps +=  line_search_summary.num_iterations;
     summary->line_search_cost_evaluation_time_in_seconds +=
         line_search_summary.cost_evaluation_time_in_seconds;
     summary->line_search_gradient_evaluation_time_in_seconds +=
@@ -423,8 +437,6 @@ void LineSearchMinimizer::Minimize(const Minimizer::Options& options,
       VLOG_IF(1, is_not_silent) << "Terminating: " << summary->message;
       break;
     }
-
-    summary->iterations.push_back(iteration_summary);
   }
 }
 

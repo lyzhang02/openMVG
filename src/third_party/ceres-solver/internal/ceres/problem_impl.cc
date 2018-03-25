@@ -39,15 +39,19 @@
 #include <utility>
 #include <vector>
 #include "ceres/casts.h"
+#include "ceres/compressed_row_jacobian_writer.h"
 #include "ceres/compressed_row_sparse_matrix.h"
 #include "ceres/cost_function.h"
 #include "ceres/crs_matrix.h"
 #include "ceres/evaluator.h"
+#include "ceres/internal/port.h"
 #include "ceres/loss_function.h"
 #include "ceres/map_util.h"
 #include "ceres/parameter_block.h"
 #include "ceres/program.h"
+#include "ceres/program_evaluator.h"
 #include "ceres/residual_block.h"
+#include "ceres/scratch_evaluate_preparer.h"
 #include "ceres/stl_util.h"
 #include "ceres/stringprintf.h"
 #include "glog/logging.h"
@@ -249,10 +253,11 @@ ResidualBlock* ProblemImpl::AddResidualBlock(
     // Check for duplicate parameter blocks.
     vector<double*> sorted_parameter_blocks(parameter_blocks);
     sort(sorted_parameter_blocks.begin(), sorted_parameter_blocks.end());
-    vector<double*>::const_iterator duplicate_items =
-        unique(sorted_parameter_blocks.begin(),
-               sorted_parameter_blocks.end());
-    if (duplicate_items != sorted_parameter_blocks.end()) {
+    const bool has_duplicate_items =
+        (std::adjacent_find(sorted_parameter_blocks.begin(),
+                            sorted_parameter_blocks.end())
+         != sorted_parameter_blocks.end());
+    if (has_duplicate_items) {
       string blocks;
       for (int i = 0; i < parameter_blocks.size(); ++i) {
         blocks += StringPrintf(" %p ", parameter_blocks[i]);
@@ -572,6 +577,16 @@ void ProblemImpl::SetParameterBlockConstant(double* values) {
   parameter_block->SetConstant();
 }
 
+bool ProblemImpl::IsParameterBlockConstant(double* values) const {
+  const ParameterBlock* parameter_block =
+      FindWithDefault(parameter_block_map_, values, NULL);
+  CHECK(parameter_block != NULL)
+    << "Parameter block not found: " << values << ". You must add the "
+    << "parameter block to the problem before it can be queried.";
+
+  return parameter_block->IsConstant();
+}
+
 void ProblemImpl::SetParameterBlockVariable(double* values) {
   ParameterBlock* parameter_block =
       FindWithDefault(parameter_block_map_, values, NULL);
@@ -741,24 +756,10 @@ bool ProblemImpl::Evaluate(const Problem::EvaluateOptions& evaluate_options,
   evaluator_options.num_threads = evaluate_options.num_threads;
 #endif  // CERES_USE_OPENMP
 
-  string error;
   scoped_ptr<Evaluator> evaluator(
-      Evaluator::Create(evaluator_options, &program, &error));
-  if (evaluator.get() == NULL) {
-    LOG(ERROR) << "Unable to create an Evaluator object. "
-               << "Error: " << error
-               << "This is a Ceres bug; please contact the developers!";
-
-    // Make the parameter blocks that were temporarily marked
-    // constant, variable again.
-    for (int i = 0; i < variable_parameter_blocks.size(); ++i) {
-      variable_parameter_blocks[i]->SetVarying();
-    }
-
-    program_->SetParameterBlockStatePtrsToUserStatePtrs();
-    program_->SetParameterOffsetsAndIndex();
-    return false;
-  }
+      new ProgramEvaluator<ScratchEvaluatePreparer,
+                           CompressedRowJacobianWriter>(evaluator_options,
+                                                        &program));
 
   if (residuals !=NULL) {
     residuals->resize(evaluator->NumResiduals());

@@ -100,7 +100,14 @@ macro(CXSPARSE_REPORT_NOT_FOUND REASON_MSG)
     # but continues configuration and allows generation.
     message("-- Failed to find CXSparse - " ${REASON_MSG} ${ARGN})
   endif ()
+  return()
 endmacro(CXSPARSE_REPORT_NOT_FOUND)
+
+# Protect against any alternative find_package scripts for this library having
+# been called previously (in a client project) which set CXSPARSE_FOUND, but not
+# the other variables we require / set here which could cause the search logic
+# here to fail.
+unset(CXSPARSE_FOUND)
 
 # Handle possible presence of lib prefix for libraries on MSVC, see
 # also CXSPARSE_RESET_FIND_LIBRARY_PREFIX().
@@ -128,12 +135,16 @@ list(APPEND CXSPARSE_CHECK_LIBRARY_DIRS
   /usr/local/homebrew/lib # Mac OS X.
   /opt/local/lib
   /usr/lib)
+# Additional suffixes to try appending to each search path.
+list(APPEND CXSPARSE_CHECK_PATH_SUFFIXES
+  suitesparse) # Linux/Windows
 
 # Search supplied hint directories first if supplied.
 find_path(CXSPARSE_INCLUDE_DIR
   NAMES cs.h
-  PATHS ${CXSPARSE_INCLUDE_DIR_HINTS}
-  ${CXSPARSE_CHECK_INCLUDE_DIRS})
+  HINTS ${CXSPARSE_INCLUDE_DIR_HINTS}
+  PATHS ${CXSPARSE_CHECK_INCLUDE_DIRS}
+  PATH_SUFFIXES ${CXSPARSE_CHECK_PATH_SUFFIXES})
 if (NOT CXSPARSE_INCLUDE_DIR OR
     NOT EXISTS ${CXSPARSE_INCLUDE_DIR})
   cxsparse_report_not_found(
@@ -143,8 +154,9 @@ endif (NOT CXSPARSE_INCLUDE_DIR OR
        NOT EXISTS ${CXSPARSE_INCLUDE_DIR})
 
 find_library(CXSPARSE_LIBRARY NAMES cxsparse
-  PATHS ${CXSPARSE_LIBRARY_DIR_HINTS}
-  ${CXSPARSE_CHECK_LIBRARY_DIRS})
+  HINTS ${CXSPARSE_LIBRARY_DIR_HINTS}
+  PATHS ${CXSPARSE_CHECK_LIBRARY_DIRS}
+  PATH_SUFFIXES ${CXSPARSE_CHECK_PATH_SUFFIXES})
 if (NOT CXSPARSE_LIBRARY OR
     NOT EXISTS ${CXSPARSE_LIBRARY})
   cxsparse_report_not_found(

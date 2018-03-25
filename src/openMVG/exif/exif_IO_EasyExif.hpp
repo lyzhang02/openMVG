@@ -1,3 +1,5 @@
+// This file is part of OpenMVG, an Open Multiple View Geometry C++ library.
+
 // Copyright (c) 2013-2015 Pierre MOULON.
 
 // This Source Code Form is subject to the terms of the Mozilla Public
@@ -7,14 +9,14 @@
 #ifndef OPENMVG_EXIF_EXIF_IO_EASYEXIF_HPP
 #define OPENMVG_EXIF_EXIF_IO_EASYEXIF_HPP
 
-#include "openMVG/exif/exif_IO.hpp"
-
-#include "third_party/easyexif/exif.h"
-
 #include <fstream>
 #include <limits>
 #include <sstream>
+#include <string>
 #include <vector>
+
+#include "openMVG/exif/exif_IO.hpp"
+#include "third_party/easyexif/exif.h"
 
 namespace openMVG
 {
@@ -27,7 +29,7 @@ namespace exif
 */
 inline std::string trim_copy( const std::string& s )
 {
-  if( s.empty() )
+  if (s.empty() )
   {
     return s;
   }
@@ -59,7 +61,7 @@ class Exif_IO_EasyExif : public Exif_IO
     * @brief Constructor using a file
     * @param sFileName path of the image to analyze
     */
-    Exif_IO_EasyExif( const std::string & sFileName ): bHaveExifInfo_( false )
+    explicit Exif_IO_EasyExif( const std::string & sFileName ): bHaveExifInfo_( false )
     {
       open( sFileName );
     }
@@ -120,6 +122,46 @@ class Exif_IO_EasyExif : public Exif_IO
     float getFocal() const override
     {
       return static_cast<float>( exifInfo_.FocalLength );
+    }
+
+    /**
+    * @brief Get FocalLengthIn35mm (in mm)
+    * @return The equivalent focal length assuming a 35mm film camera, in mm.
+    */
+    float getFocalLengthIn35mm() const override
+    {
+      return static_cast<float>( exifInfo_.FocalLengthIn35mm );
+    }
+
+    /**
+    * @brief Get FocalPlaneXResolution
+    * @return Number of pixels in the image width (X) direction per
+    *           FocalPlaneResolutionUnit on the camera focal plane.
+    */
+    float getFocalPlaneXResolution() const override
+    {
+      return static_cast<float>( exifInfo_.LensInfo.FocalPlaneXResolution );
+    }
+
+    /**
+    * @brief Get FocalPlaneYResolution 
+    * @return Number of pixels in the image height (Y) direction per
+    *           FocalPlaneResolutionUnit on the camera focal plane.
+    */
+    float getFocalPlaneYResolution() const override
+    {
+      return static_cast<float>( exifInfo_.LensInfo.FocalPlaneYResolution );
+    }
+
+    /**
+    * @brief Get FocalPlaneResolutionUnit
+    *        Unit -> 2: inch, 3: centimeter, 4: millimeter, 5: micrometer.
+    * @return Indicates the unit for measuring FocalPlaneXResolution and
+    *          FocalPlaneYResolution.
+    */
+    int getFocalPlaneResolutionUnit() const override
+    {
+      return static_cast<int>( exifInfo_.LensInfo.FocalPlaneResolutionUnit );
     }
 
     /**

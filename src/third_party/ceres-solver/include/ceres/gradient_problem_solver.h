@@ -74,6 +74,7 @@ class CERES_EXPORT GradientProblemSolver {
       max_solver_time_in_seconds = 1e9;
       function_tolerance = 1e-6;
       gradient_tolerance = 1e-10;
+      parameter_tolerance = 1e-8;
       logging_type = PER_MINIMIZER_ITERATION;
       minimizer_progress_to_stdout = false;
     }
@@ -236,6 +237,12 @@ class CERES_EXPORT GradientProblemSolver {
     // This value should typically be 1e-4 * function_tolerance.
     double gradient_tolerance;
 
+    // Minimizer terminates when
+    //
+    //   |step|_2 <= parameter_tolerance * ( |x|_2 +  parameter_tolerance)
+    //
+    double parameter_tolerance;
+
     // Logging options ---------------------------------------------------------
 
     LoggingType logging_type;
@@ -293,6 +300,12 @@ class CERES_EXPORT GradientProblemSolver {
 
     // IterationSummary for each minimizer iteration in order.
     std::vector<IterationSummary> iterations;
+
+    // Number of times the cost (and not the gradient) was evaluated.
+    int num_cost_evaluations;
+
+    // Number of times the gradient (and the cost) were evaluated.
+    int num_gradient_evaluations;
 
     // Sum total of all time spent inside Ceres when Solve is called.
     double total_time_in_seconds;

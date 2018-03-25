@@ -1,3 +1,4 @@
+// This file is part of OpenMVG, an Open Multiple View Geometry C++ library.
 
 // Copyright (c) 2015 Pierre MOULON.
 
@@ -7,123 +8,115 @@
 
 #include "openMVG/sfm/pipelines/sfm_robust_model_estimation.hpp"
 
-#include "openMVG/multiview/projection.hpp"
+#include <array>
+
+#include "openMVG/cameras/Camera_Intrinsics.hpp"
+#include "openMVG/cameras/Camera_Pinhole.hpp"
+#include "openMVG/multiview/motion_from_essential.hpp"
 #include "openMVG/multiview/solver_essential_kernel.hpp"
-#include "openMVG/multiview/triangulation.hpp"
+#include "openMVG/multiview/solver_essential_eight_point.hpp"
+#include "openMVG/numeric/numeric.h"
 #include "openMVG/robust_estimation/robust_estimator_ACRansac.hpp"
 #include "openMVG/robust_estimation/robust_estimator_ACRansacKernelAdaptator.hpp"
+
+using namespace openMVG::cameras;
+using namespace openMVG::geometry;
 
 namespace openMVG {
 namespace sfm {
 
-bool estimate_Rt_fromE
-(
-  const Mat3 & K1,
-  const Mat3 & K2,
-  const Mat & x1,
-  const Mat & x2,
-  const Mat3 & E,
-  const std::vector<size_t> & vec_inliers,
-  Mat3 * R,
-  Vec3 * t
-)
-{
-  // Accumulator to find the best solution
-  std::vector<size_t> f(4, 0);
-
-  std::vector<Mat3> Rs;  // Rotation matrix.
-  std::vector<Vec3> ts;  // Translation matrix.
-
-  // Recover best rotation and translation from E.
-  MotionFromEssential(E, &Rs, &ts);
-
-  //-> Test the 4 solutions will all the points
-  assert(Rs.size() == 4);
-  assert(ts.size() == 4);
-
-  Mat34 P1, P2;
-  Mat3 R1 = Mat3::Identity();
-  Vec3 t1 = Vec3::Zero();
-  P_From_KRt(K1, R1, t1, &P1);
-
-  for (unsigned int i = 0; i < 4; ++i)
-  {
-    const Mat3 &R2 = Rs[i];
-    const Vec3 &t2 = ts[i];
-    P_From_KRt(K2, R2, t2, &P2);
-    Vec3 X;
-
-    for (size_t k = 0; k < vec_inliers.size(); ++k)
-    {
-      const Vec2
-        & x1_ = x1.col(vec_inliers[k]),
-        & x2_ = x2.col(vec_inliers[k]);
-      TriangulateDLT(P1, x1_, P2, x2_, &X);
-      // Test if point is front to the two cameras.
-      if (Depth(R1, t1, X) > 0 && Depth(R2, t2, X) > 0)
-      {
-        ++f[i];
-      }
-    }
-  }
-  // Check the solution:
-  const std::vector<size_t>::iterator iter = std::max_element(f.begin(), f.end());
-  if (*iter == 0)
-  {
-    // There is no right solution with points in front of the cameras
-    return false;
-  }
-  const size_t index = std::distance(f.begin(), iter);
-  (*R) = Rs[index];
-  (*t) = ts[index];
-
-  return true;
-}
-
-using namespace openMVG::robust;
-
 bool robustRelativePose
 (
-  const Mat3 & K1, const Mat3 & K2,
-  const Mat & x1, const Mat & x2,
+  const IntrinsicBase * intrinsics1,
+  const IntrinsicBase * intrinsics2,
+  const Mat & x1,
+  const Mat & x2,
   RelativePose_Info & relativePose_info,
   const std::pair<size_t, size_t> & size_ima1,
   const std::pair<size_t, size_t> & size_ima2,
   const size_t max_iteration_count
 )
 {
-  // Use the 5 point solver to estimate E
-  using SolverType = openMVG::essential::kernel::FivePointKernel;
-  // Define the AContrario adaptor
-  using KernelType = ACKernelAdaptorEssential<
-      SolverType,
+  if (!intrinsics1 || !intrinsics2)
+    return false;
+
+  // Compute the bearing vectors
+  const Mat3X
+    bearing1 = (*intrinsics1)(x1),
+    bearing2 = (*intrinsics2)(x2);
+
+  if (isPinhole(intrinsics1->getType())
+      && isPinhole(intrinsics2->getType()))
+  {
+    // Define the AContrario adaptor to use the 5 point essential matrix solver.
+    using KernelType = robust::ACKernelAdaptorEssential<
+      openMVG::essential::kernel::FivePointSolver,
       openMVG::fundamental::kernel::EpipolarDistanceError,
       Mat3>;
+    KernelType kernel(x1, bearing1, size_ima1.first, size_ima1.second,
+                      x2, bearing2, size_ima2.first, size_ima2.second,
+                      dynamic_cast<const cameras::Pinhole_Intrinsic*>(intrinsics1)->K(),
+                      dynamic_cast<const cameras::Pinhole_Intrinsic*>(intrinsics2)->K());
 
-  KernelType kernel(x1, size_ima1.first, size_ima1.second,
-                    x2, size_ima2.first, size_ima2.second, K1, K2);
+    // Robustly estimation of the Model and its precision
+    const auto ac_ransac_output = robust::ACRANSAC(
+      kernel, relativePose_info.vec_inliers,
+      max_iteration_count, &relativePose_info.essential_matrix,
+      relativePose_info.initial_residual_tolerance, false);
 
-  // Robustly estimation of the Essential matrix and it's precision
-  const std::pair<double,double> acRansacOut = ACRANSAC(kernel, relativePose_info.vec_inliers,
-    max_iteration_count, &relativePose_info.essential_matrix, relativePose_info.initial_residual_tolerance, false);
-  relativePose_info.found_residual_precision = acRansacOut.first;
+    relativePose_info.found_residual_precision = ac_ransac_output.first;
 
-  if (relativePose_info.vec_inliers.size() < 2.5 * SolverType::MINIMUM_SAMPLES )
-    return false; // no sufficient coverage (the model does not support enough samples)
+    if (relativePose_info.vec_inliers.size() <
+        2.5 * KernelType::Solver::MINIMUM_SAMPLES )
+    {
+      return false; // no sufficient coverage (the model does not support enough samples)
+    }
+  }
+  else
+  {
+    // Define the AContrario adaptor to use the 8 point essential matrix solver.
+    typedef openMVG::robust::ACKernelAdaptor_AngularRadianError<
+        openMVG::EightPointRelativePoseSolver,
+        // openMVG::essential::kernel::FivePointSolver,
+        openMVG::AngularError,
+        Mat3>
+        KernelType;
 
-  // estimation of the relative poses
-  Mat3 R;
-  Vec3 t;
-  if (!estimate_Rt_fromE(
-    K1, K2, x1, x2,
-    relativePose_info.essential_matrix, relativePose_info.vec_inliers, &R, &t))
-    return false; // cannot find a valid [R|t] couple that makes the inliers in front of the camera.
+    KernelType kernel(bearing1, bearing2);
 
-  // Store [R|C] for the second camera, since the first camera is [Id|0]
-  relativePose_info.relativePose = geometry::Pose3(R, -R.transpose() * t);
+    // Robustly estimate the Essential matrix with A Contrario ransac
+    const double upper_bound_precision =
+      (relativePose_info.initial_residual_tolerance == std::numeric_limits<double>::infinity()) ?
+        std::numeric_limits<double>::infinity()
+        : D2R(relativePose_info.initial_residual_tolerance);
+    const auto ac_ransac_output =
+      ACRANSAC(kernel, relativePose_info.vec_inliers,
+        max_iteration_count, &relativePose_info.essential_matrix,
+        upper_bound_precision, false);
+
+    const double & threshold = ac_ransac_output.first;
+    relativePose_info.found_residual_precision = R2D(threshold); // Degree
+
+    if (relativePose_info.vec_inliers.size() <
+        2.5 * KernelType::Solver::MINIMUM_SAMPLES )
+    {
+      return false; // no sufficient coverage (the model does not support enough samples)
+    }
+  }
+
+  // estimation of the relative poses based on the cheirality test
+  Pose3 relative_pose;
+  if (!RelativePoseFromEssential(
+    bearing1,
+    bearing2,
+    relativePose_info.essential_matrix,
+    relativePose_info.vec_inliers, &relative_pose))
+  {
+    return false;
+  }
+  relativePose_info.relativePose = relative_pose;
   return true;
 }
 
 } // namespace sfm
 } // namespace openMVG
-

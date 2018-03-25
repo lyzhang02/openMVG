@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <sstream>   // NOLINT
 #include <vector>
+#include "ceres/detect_structure.h"
 #include "ceres/gradient_checking_cost_function.h"
 #include "ceres/internal/port.h"
 #include "ceres/parameter_block_ordering.h"
@@ -41,6 +42,7 @@
 #include "ceres/problem.h"
 #include "ceres/problem_impl.h"
 #include "ceres/program.h"
+#include "ceres/schur_templates.h"
 #include "ceres/solver_utils.h"
 #include "ceres/stringprintf.h"
 #include "ceres/types.h"
@@ -94,7 +96,7 @@ bool CommonOptionsAreValid(const Solver::Options& options, string* error) {
   OPTION_GT(num_linear_solver_threads, 0);
   if (options.check_gradients) {
     OPTION_GT(gradient_check_relative_precision, 0.0);
-    OPTION_GT(numeric_derivative_relative_step_size, 0.0);
+    OPTION_GT(gradient_check_numeric_derivative_relative_step_size, 0.0);
   }
   return true;
 }
@@ -316,7 +318,7 @@ void StringifyOrdering(const vector<int>& ordering, string* report) {
   }
 
   for (int i = 0; i < ordering.size() - 1; ++i) {
-    internal::StringAppendF(report, "%d, ", ordering[i]);
+    internal::StringAppendF(report, "%d,", ordering[i]);
   }
   internal::StringAppendF(report, "%d", ordering.back());
 }
@@ -351,6 +353,7 @@ void PreSolveSummarize(const Solver::Options& options,
   summary->dense_linear_algebra_library_type  = options.dense_linear_algebra_library_type;  //  NOLINT
   summary->dogleg_type                        = options.dogleg_type;
   summary->inner_iteration_time_in_seconds    = 0.0;
+  summary->num_line_search_steps              = 0;
   summary->line_search_cost_evaluation_time_in_seconds = 0.0;
   summary->line_search_gradient_evaluation_time_in_seconds = 0.0;
   summary->line_search_polynomial_minimization_time_in_seconds = 0.0;
@@ -379,7 +382,7 @@ void PostSolveSummarize(const internal::PreprocessedProblem& pp,
                                  &(summary->inner_iteration_ordering_used));
 
   summary->inner_iterations_used          = pp.inner_iteration_minimizer.get() != NULL;     // NOLINT
-  summary->linear_solver_type_used        = pp.options.linear_solver_type;
+  summary->linear_solver_type_used        = pp.linear_solver_options.type;
   summary->num_linear_solver_threads_used = pp.options.num_linear_solver_threads;           // NOLINT
   summary->num_threads_used               = pp.options.num_threads;
   summary->preconditioner_type_used       = pp.options.preconditioner_type;                 // NOLINT
@@ -445,6 +448,24 @@ void Minimize(internal::PreprocessedProblem* pp,
   }
 }
 
+std::string SchurStructureToString(const int row_block_size,
+                                   const int e_block_size,
+                                   const int f_block_size) {
+  const std::string row =
+      (row_block_size == Eigen::Dynamic)
+      ? "d" : internal::StringPrintf("%d", row_block_size);
+
+  const std::string e =
+      (e_block_size == Eigen::Dynamic)
+      ? "d" : internal::StringPrintf("%d", e_block_size);
+
+  const std::string f =
+      (f_block_size == Eigen::Dynamic)
+      ? "d" : internal::StringPrintf("%d", f_block_size);
+
+  return internal::StringPrintf("%s,%s,%s", row.c_str(), e.c_str(), f.c_str());
+}
+
 }  // namespace
 
 bool Solver::Options::IsValid(string* error) const {
@@ -495,21 +516,57 @@ void Solver::Solve(const Solver::Options& options,
   // values provided by the user.
   program->SetParameterBlockStatePtrsToUserStatePtrs();
 
+  // If gradient_checking is enabled, wrap all cost functions in a
+  // gradient checker and install a callback that terminates if any gradient
+  // error is detected.
   scoped_ptr<internal::ProblemImpl> gradient_checking_problem;
+  internal::GradientCheckingIterationCallback gradient_checking_callback;
+  Solver::Options modified_options = options;
   if (options.check_gradients) {
+    modified_options.callbacks.push_back(&gradient_checking_callback);
     gradient_checking_problem.reset(
         CreateGradientCheckingProblemImpl(
             problem_impl,
-            options.numeric_derivative_relative_step_size,
-            options.gradient_check_relative_precision));
+            options.gradient_check_numeric_derivative_relative_step_size,
+            options.gradient_check_relative_precision,
+            &gradient_checking_callback));
     problem_impl = gradient_checking_problem.get();
     program = problem_impl->mutable_program();
   }
 
   scoped_ptr<Preprocessor> preprocessor(
-      Preprocessor::Create(options.minimizer_type));
+      Preprocessor::Create(modified_options.minimizer_type));
   PreprocessedProblem pp;
-  const bool status = preprocessor->Preprocess(options, problem_impl, &pp);
+
+  const bool status = preprocessor->Preprocess(modified_options, problem_impl, &pp);
+
+  // We check the linear_solver_options.type rather than
+  // modified_options.linear_solver_type because, depending on the
+  // lack of a Schur structure, the preprocessor may change the linear
+  // solver type.
+  if (IsSchurType(pp.linear_solver_options.type)) {
+    // TODO(sameeragarwal): We can likely eliminate the duplicate call
+    // to DetectStructure here and inside the linear solver, by
+    // calling this in the preprocessor.
+    int row_block_size;
+    int e_block_size;
+    int f_block_size;
+    DetectStructure(*static_cast<internal::BlockSparseMatrix*>(
+                        pp.minimizer_options.jacobian.get())
+                    ->block_structure(),
+                    pp.linear_solver_options.elimination_groups[0],
+                    &row_block_size,
+                    &e_block_size,
+                    &f_block_size);
+    summary->schur_structure_given =
+        SchurStructureToString(row_block_size, e_block_size, f_block_size);
+    internal::GetBestSchurTemplateSpecialization(&row_block_size,
+                                                 &e_block_size,
+                                                 &f_block_size);
+    summary->schur_structure_used =
+        SchurStructureToString(row_block_size, e_block_size, f_block_size);
+  }
+
   summary->fixed_cost = pp.fixed_cost;
   summary->preprocessor_time_in_seconds = WallTimeInSeconds() - start_time;
 
@@ -534,6 +591,13 @@ void Solver::Solve(const Solver::Options& options,
   summary->postprocessor_time_in_seconds =
       WallTimeInSeconds() - postprocessor_start_time;
 
+  // If the gradient checker reported an error, we want to report FAILURE
+  // instead of USER_FAILURE and provide the error log.
+  if (gradient_checking_callback.gradient_error_detected()) {
+    summary->termination_type = FAILURE;
+    summary->message = gradient_checking_callback.error_log();
+  }
+
   summary->total_time_in_seconds = WallTimeInSeconds() - start_time;
 }
 
@@ -556,6 +620,7 @@ Solver::Summary::Summary()
       num_successful_steps(-1),
       num_unsuccessful_steps(-1),
       num_inner_iteration_steps(-1),
+      num_line_search_steps(-1),
       preprocessor_time_in_seconds(-1.0),
       minimizer_time_in_seconds(-1.0),
       postprocessor_time_in_seconds(-1.0),
@@ -696,15 +761,19 @@ string Solver::Summary::FullReport() const {
                   num_linear_solver_threads_given,
                   num_linear_solver_threads_used);
 
+    string given;
+    StringifyOrdering(linear_solver_ordering_given, &given);
+    string used;
+    StringifyOrdering(linear_solver_ordering_used, &used);
+    StringAppendF(&report,
+                  "Linear solver ordering %22s %24s\n",
+                  given.c_str(),
+                  used.c_str());
     if (IsSchurType(linear_solver_type_used)) {
-      string given;
-      StringifyOrdering(linear_solver_ordering_given, &given);
-      string used;
-      StringifyOrdering(linear_solver_ordering_used, &used);
       StringAppendF(&report,
-                    "Linear solver ordering %22s %24s\n",
-                    given.c_str(),
-                    used.c_str());
+                    "Schur structure        %22s %24s\n",
+                    schur_structure_given.c_str(),
+                    schur_structure_used.c_str());
     }
 
     if (inner_iterations_given) {
@@ -784,9 +853,14 @@ string Solver::Summary::FullReport() const {
                   num_inner_iteration_steps);
   }
 
-  const bool print_line_search_timing_information =
-      minimizer_type == LINE_SEARCH ||
-      (minimizer_type == TRUST_REGION && is_constrained);
+  const bool line_search_used =
+      (minimizer_type == LINE_SEARCH ||
+       (minimizer_type == TRUST_REGION && is_constrained));
+
+  if (line_search_used) {
+    StringAppendF(&report, "Line search steps              % 14d\n",
+                  num_line_search_steps);
+  }
 
   StringAppendF(&report, "\nTime (in seconds):\n");
   StringAppendF(&report, "Preprocessor        %25.4f\n",
@@ -794,14 +868,14 @@ string Solver::Summary::FullReport() const {
 
   StringAppendF(&report, "\n  Residual evaluation %23.4f\n",
                 residual_evaluation_time_in_seconds);
-  if (print_line_search_timing_information) {
+  if (line_search_used) {
     StringAppendF(&report, "    Line search cost evaluation    %10.4f\n",
                   line_search_cost_evaluation_time_in_seconds);
   }
   StringAppendF(&report, "  Jacobian evaluation %23.4f\n",
                 jacobian_evaluation_time_in_seconds);
-  if (print_line_search_timing_information) {
-    StringAppendF(&report, "    Line search gradient evaluation    %6.4f\n",
+  if (line_search_used) {
+    StringAppendF(&report, "    Line search gradient evaluation   %6.4f\n",
                   line_search_gradient_evaluation_time_in_seconds);
   }
 
@@ -815,7 +889,7 @@ string Solver::Summary::FullReport() const {
                   inner_iteration_time_in_seconds);
   }
 
-  if (print_line_search_timing_information) {
+  if (line_search_used) {
     StringAppendF(&report, "  Line search polynomial minimization  %.4f\n",
                   line_search_polynomial_minimization_time_in_seconds);
   }

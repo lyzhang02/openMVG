@@ -1,3 +1,4 @@
+// This file is part of OpenMVG, an Open Multiple View Geometry C++ library.
 
 // Copyright (c) 2015 Pierre MOULON.
 
@@ -5,10 +6,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+// The <cereal/archives> headers are special and must be included first.
+#include <cereal/archives/json.hpp>
+
 #include <openMVG/sfm/sfm.hpp>
-#include <openMVG/features/features.hpp>
-#include <nonFree/sift/SIFT_describer.hpp>
-#include <openMVG/image/image.hpp>
+#include <openMVG/features/feature.hpp>
+#include <openMVG/features/image_describer.hpp>
+#include <openMVG/image/image_io.hpp>
 #include <software/SfM/SfMPlyHelper.hpp>
 
 #include <openMVG/system/timer.hpp>
@@ -17,16 +21,23 @@
 using namespace openMVG;
 using namespace openMVG::sfm;
 
+#include "nonFree/sift/SIFT_describer_io.hpp"
+#include "openMVG/features/image_describer_akaze_io.hpp"
+
 #include "third_party/cmdLine/cmdLine.h"
 #include "third_party/stlplus3/filesystemSimplified/file_system.hpp"
 
 #include <cstdlib>
 
+#ifdef OPENMVG_USE_OPENMP
+#include <omp.h>
+#endif
+
 // Naive function for finding the biggest common root dir from two paths
 std::string FindCommonRootDir(const std::string & dir1, const std::string & dir2)
 {
   int i = 0;
-  for (; i != min(dir1.size(), dir2.size()); i++)
+  for (; i != std::min(dir1.size(), dir2.size()); i++)
   {
     if (dir1[i] != dir2[i]) break;
   }
@@ -71,12 +82,12 @@ int main(int argc, char **argv)
 #ifdef OPENMVG_USE_OPENMP
   cmd.add( make_option('n', iNumThreads, "numThreads") );
 #endif
-  
+
 
   try {
     if (argc == 1) throw std::string("Invalid parameter.");
     cmd.process(argc, argv);
-  } catch(const std::string& s) {
+  } catch (const std::string& s) {
     std::cerr << "Usage: " << argv[0] << '\n'
     << "[-i|--input_file] path to a SfM_Data scene\n"
     << "[-m|--match_dir] path to the directory containing the matches\n"
@@ -147,7 +158,7 @@ int main(int argc, char **argv)
     // Dynamically load the image_describer from the file (will restore old used settings)
     std::ifstream stream(sImage_describer.c_str());
     if (!stream.is_open())
-      return false;
+      return EXIT_FAILURE;
 
     try
     {
@@ -167,9 +178,12 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
+  // Show the progress on the command line:
+  C_Progress_display progress;
+
   // Load the SfM_Data region's views
   std::shared_ptr<Regions_Provider> regions_provider = std::make_shared<Regions_Provider>();
-  if (!regions_provider->load(sfm_data, sMatchesDir, regions_type)) {
+  if (!regions_provider->load(sfm_data, sMatchesDir, regions_type, &progress)) {
     std::cerr << std::endl << "Invalid regions." << std::endl;
     return EXIT_FAILURE;
   }
@@ -182,14 +196,14 @@ int main(int argc, char **argv)
   }
 
   if (sOutDir.empty())  {
-    std::cerr << "\nIt is an invalid output directory" << std::endl;
+    std::cerr << "\nPlease provide a valid directory for the option [-o|--out_dir]." << std::endl;
     return EXIT_FAILURE;
   }
 
   if (!stlplus::folder_exists(sOutDir))
     stlplus::folder_create(sOutDir);
 
- if (bUseSingleIntrinsics && sfm_data.GetIntrinsics().size() != 1)
+  if (bUseSingleIntrinsics && sfm_data.GetIntrinsics().size() != 1)
   {
     std::cout << "More than one intrinsics to compare to in input scene "
               << " => Consider intrinsics as unkown." << std::endl;
@@ -215,12 +229,18 @@ int main(int argc, char **argv)
   // list images from sfm_data in a vector
   std::vector<std::string> vec_image_original (sfm_data.GetViews().size());
   int n(-1);
-  std::generate(vec_image_original.begin(),vec_image_original.end(),[&n,&sfm_data]{ n++; return stlplus::filename_part(sfm_data.views.at(n).get()->s_Img_path);} );
-  
+  std::generate(vec_image_original.begin(),
+                vec_image_original.end(),
+                [&n,&sfm_data]
+                {
+                  n++;
+                  return stlplus::filename_part(sfm_data.views.at(n)->s_Img_path);
+                });
+
   // list images in query directory
   std::vector<std::string> vec_image;
 
-  if (stlplus::is_file(sQueryDir)) 
+  if (stlplus::is_file(sQueryDir))
   {
     vec_image.push_back(stlplus::filename_part(sQueryDir)); // single file
     sQueryDir = stlplus::folder_part(sQueryDir);
@@ -231,8 +251,8 @@ int main(int argc, char **argv)
 
   // find difference between two list of images
   std::vector<std::string> vec_image_new;
-  std::set_difference(vec_image.begin(), vec_image.end(),
-      vec_image_original.begin(),vec_image_original.end(),
+  std::set_difference(vec_image.cbegin(), vec_image.cend(),
+      vec_image_original.cbegin(),vec_image_original.cend(),
       std::back_inserter(vec_image_new));
 
   // find common root directory between images in vec_image_original and vec_images_new
@@ -245,8 +265,8 @@ int main(int argc, char **argv)
     // reconstruction
     for (auto & view : sfm_data.GetViews())
     {
-      view.second.get()->s_Img_path = stlplus::create_filespec(stlplus::folder_to_relative_path(common_root_dir, sfm_data.s_root_path), 
-          view.second.get()->s_Img_path);
+      view.second->s_Img_path = stlplus::create_filespec(stlplus::folder_to_relative_path(common_root_dir, sfm_data.s_root_path),
+          view.second->s_Img_path);
     }
     // change root path to common root path
     sfm_data.s_root_path = common_root_dir;
@@ -256,13 +276,9 @@ int main(int argc, char **argv)
   Views & views = sfm_data.views;
   Poses & poses = sfm_data.poses;
   Intrinsics & intrinsics = sfm_data.intrinsics;
-  
-  // first intrinsics of the input sfm_data file, will be used if we inforce single intrinsics
-  cameras::Pinhole_Intrinsic_Radial_K3 * ptrPinhole = dynamic_cast<cameras::Pinhole_Intrinsic_Radial_K3*>(sfm_data.GetIntrinsics().at(0).get());
-  const int num_initial_intrinsics = sfm_data.GetIntrinsics().size(); 
 
   int total_num_images = 0;
-  
+
 #ifdef OPENMVG_USE_OPENMP
   const unsigned int nb_max_thread = (iNumThreads == 0) ? 0 : omp_get_max_threads();
     omp_set_num_threads(nb_max_thread);
@@ -280,7 +296,7 @@ int main(int argc, char **argv)
       std::cerr << *iter_image << " : unknown image file format." << std::endl;
       continue;
     }
-    
+
     std::cout << "SfM::localization => try with image: " << *iter_image << std::endl;
     std::unique_ptr<Regions> query_regions(regions_type->EmptyClone());
     image::Image<unsigned char> imageGray;
@@ -310,13 +326,30 @@ int main(int argc, char **argv)
       }
     }
 
-    std::shared_ptr<cameras::IntrinsicBase> optional_intrinsic(nullptr);
-    if (bUseSingleIntrinsics && num_initial_intrinsics == 1)
+    std::shared_ptr<cameras::IntrinsicBase> optional_intrinsic;
+    if (bUseSingleIntrinsics)
     {
-      optional_intrinsic = std::make_shared<cameras::Pinhole_Intrinsic_Radial_K3>(
-        imageGray.Width(), imageGray.Height(),
-        ptrPinhole->focal(), ptrPinhole->principal_point()[0], ptrPinhole->principal_point()[1],
-        ptrPinhole->getParams()[3], ptrPinhole->getParams()[4], ptrPinhole->getParams()[5]);
+      if (sfm_data.GetIntrinsics().size() != 1)
+      {
+        std::cerr << "You choose the single intrinsic mode but the sfm_data scene,"
+          <<" have too few or too much intrinsics."
+          << std::endl;
+        continue;
+      }
+      optional_intrinsic = sfm_data.GetIntrinsics().at(0);
+      if (imageGray.Width() != optional_intrinsic->w() || optional_intrinsic->h() != imageGray.Height())
+      {
+        std::cout << "The provided image does not have the same size as the camera model you want to use." << std::endl;
+        continue;
+      }
+    }
+    if (optional_intrinsic)
+    {
+      std::cout << "- use known intrinsics." << std::endl;
+    }
+    else
+    {
+      std::cout << "- use UNknown intrinsics for the resection. Then create a Pinhole_Intrinsic_Radial_K3 camera." << std::endl;
     }
 
     geometry::Pose3 pose;
@@ -327,7 +360,8 @@ int main(int argc, char **argv)
 
     // Try to localize the image in the database thanks to its regions
     if (!localizer.Localize(
-      Pair(imageGray.Width(), imageGray.Height()),
+      optional_intrinsic ? resection::SolverType::P3P_KE_CVPR17 : resection::SolverType::DLT_6POINTS,
+      {imageGray.Width(), imageGray.Height()},
       optional_intrinsic.get(),
       *(query_regions.get()),
       pose,
@@ -357,49 +391,49 @@ int main(int argc, char **argv)
           focal, principal_point(0), principal_point(1));
 
       }
-      if (!sfm::SfM_Localizer::RefinePose
-      (
+      if (!sfm::SfM_Localizer::RefinePose(
         optional_intrinsic.get(),
         pose, matching_data,
-        true, b_new_intrinsic
-      ))
+        true, b_new_intrinsic))
       {
         std::cerr << "Refining pose for image " << *iter_image << " failed." << std::endl;
       }
-      
+
       bSuccessfulLocalization = true;
-      
+
     }
 #ifdef OPENMVG_USE_OPENMP
     #pragma omp critical
 #endif
-{
-    total_num_images++;
-    
-    View v(*iter_image, views.size(), views.size(), views.size(), imageGray.Width(), imageGray.Height());
-    if(bSuccessfulLocalization)
     {
-      vec_found_poses.push_back(pose.center());
-      // Build the view corresponding to the image
+      total_num_images++;
 
-      // Add the computed intrinsic to the sfm_container
-      intrinsics[v.id_intrinsic] = optional_intrinsic;
-      // Add the computed pose to the sfm_container
-      poses[v.id_pose] = pose;
-      
+      View v(*iter_image, views.size(), views.size(), views.size(), imageGray.Width(), imageGray.Height());
+      if (bSuccessfulLocalization)
+      {
+        vec_found_poses.push_back(pose.center());
+
+        // Add the computed intrinsic to the sfm_container
+        if (!bUseSingleIntrinsics)
+          intrinsics[v.id_intrinsic] = optional_intrinsic;
+        else // Make the view using the existing intrinsic id
+          v.id_intrinsic = sfm_data.GetViews().begin()->second->id_intrinsic;
+        // Add the computed pose to the sfm_container
+        poses[v.id_pose] = pose;
+
+      }
+      else
+      {
+        v.id_intrinsic = UndefinedIndexT;
+        v.id_pose = UndefinedIndexT;
+      }
+      // Add the view to the sfm_container
+      views[v.id_view] = std::make_shared<View>(v);
     }
-    else
-    {
-      v.id_intrinsic = UndefinedIndexT;
-      v.id_pose = UndefinedIndexT;  
-    }
-    // Add the view to the sfm_container
-    views[v.id_view] = std::make_shared<View>(v);
-}
   }
 
   GroupSharedIntrinsics(sfm_data);
-  
+
   std::cout << " Total poses found : " << vec_found_poses.size() << "/" << total_num_images << endl;
 
   // Export the found camera position in a ply.
@@ -408,14 +442,14 @@ int main(int argc, char **argv)
 
   // Export found camera poses along with original reconstruction in a new sfm_data file
   ESfM_Data flag_save;
-  if(bExportStructure)
+  if (bExportStructure)
   {
     flag_save = ESfM_Data(ALL);
   }
   else
   {
     flag_save = ESfM_Data(VIEWS|INTRINSICS|EXTRINSICS);
-  } 
+  }
   if (!Save(
     sfm_data,
     stlplus::create_filespec( sOutDir, "sfm_data_expanded.json" ).c_str(),

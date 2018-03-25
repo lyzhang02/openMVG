@@ -72,6 +72,7 @@ Solver::Options GradientProblemSolverOptionsToSolverOptions(
   COPY_OPTION(max_line_search_step_expansion);
   COPY_OPTION(max_num_iterations);
   COPY_OPTION(max_solver_time_in_seconds);
+  COPY_OPTION(parameter_tolerance);
   COPY_OPTION(function_tolerance);
   COPY_OPTION(gradient_tolerance);
   COPY_OPTION(logging_type);
@@ -83,6 +84,12 @@ Solver::Options GradientProblemSolverOptionsToSolverOptions(
 
 
 }  // namespace
+
+bool GradientProblemSolver::Options::IsValid(std::string* error) const {
+  const Solver::Options solver_options =
+      GradientProblemSolverOptionsToSolverOptions(*this);
+  return solver_options.IsValid(error);
+}
 
 GradientProblemSolver::~GradientProblemSolver() {
 }
@@ -99,8 +106,6 @@ void GradientProblemSolver::Solve(const GradientProblemSolver::Options& options,
   using internal::SetSummaryFinalCost;
 
   double start_time = WallTimeInSeconds();
-  Solver::Options solver_options =
-      GradientProblemSolverOptionsToSolverOptions(options);
 
   *CHECK_NOTNULL(summary) = Summary();
   summary->num_parameters                    = problem.NumParameters();
@@ -112,14 +117,16 @@ void GradientProblemSolver::Solve(const GradientProblemSolver::Options& options,
   summary->nonlinear_conjugate_gradient_type = options.nonlinear_conjugate_gradient_type;  //  NOLINT
 
   // Check validity
-  if (!solver_options.IsValid(&summary->message)) {
+  if (!options.IsValid(&summary->message)) {
     LOG(ERROR) << "Terminating: " << summary->message;
     return;
   }
 
-  // Assuming that the parameter blocks in the program have been
-  Minimizer::Options minimizer_options;
-  minimizer_options = Minimizer::Options(solver_options);
+  // TODO(sameeragarwal): This is a bit convoluted, we should be able
+  // to convert to minimizer options directly, but this will do for
+  // now.
+  Minimizer::Options minimizer_options =
+      Minimizer::Options(GradientProblemSolverOptionsToSolverOptions(options));
   minimizer_options.evaluator.reset(new GradientProblemEvaluator(problem));
 
   scoped_ptr<IterationCallback> logging_callback;
@@ -162,7 +169,12 @@ void GradientProblemSolver::Solve(const GradientProblemSolver::Options& options,
       FindWithDefault(evaluator_time_statistics, "Evaluator::Residual", 0.0);
   summary->gradient_evaluation_time_in_seconds =
       FindWithDefault(evaluator_time_statistics, "Evaluator::Jacobian", 0.0);
-
+  const std::map<string, int>& evaluator_call_statistics =
+       minimizer_options.evaluator->CallStatistics();
+  summary->num_cost_evaluations =
+      FindWithDefault(evaluator_call_statistics, "Evaluator::Residual", 0);
+  summary->num_gradient_evaluations =
+      FindWithDefault(evaluator_call_statistics, "Evaluator::Jacobian", 0);
   summary->total_time_in_seconds = WallTimeInSeconds() - start_time;
 }
 
@@ -250,14 +262,14 @@ string GradientProblemSolver::Summary::FullReport() const {
                 static_cast<int>(iterations.size()));
 
   StringAppendF(&report, "\nTime (in seconds):\n");
-
-  StringAppendF(&report, "\n  Cost evaluation     %23.4f\n",
-                cost_evaluation_time_in_seconds);
-  StringAppendF(&report, "  Gradient evaluation %23.4f\n",
-                gradient_evaluation_time_in_seconds);
+  StringAppendF(&report, "\n  Cost evaluation     %23.4f (%d)\n",
+                cost_evaluation_time_in_seconds,
+                num_cost_evaluations);
+  StringAppendF(&report, "  Gradient evaluation %23.4f (%d)\n",
+                gradient_evaluation_time_in_seconds,
+                num_gradient_evaluations);
   StringAppendF(&report, "  Polynomial minimization   %17.4f\n",
                 line_search_polynomial_minimization_time_in_seconds);
-
   StringAppendF(&report, "Total               %25.4f\n\n",
                 total_time_in_seconds);
 

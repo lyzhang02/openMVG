@@ -1,3 +1,4 @@
+// This file is part of OpenMVG, an Open Multiple View Geometry C++ library.
 
 // Copyright (c) 2012, 2013, 2015 Pierre MOULON.
 
@@ -8,6 +9,10 @@
 #ifndef OPENMVG_MATCHING_IMAGE_COLLECTION_F_AC_ROBUST_HPP
 #define OPENMVG_MATCHING_IMAGE_COLLECTION_F_AC_ROBUST_HPP
 
+#include <limits>
+#include <utility>
+#include <vector>
+
 #include "openMVG/matching/indMatch.hpp"
 #include "openMVG/matching_image_collection/Geometric_Filter_utils.hpp"
 #include "openMVG/multiview/essential.hpp"
@@ -17,12 +22,7 @@
 #include "openMVG/robust_estimation/robust_estimator_ACRansacKernelAdaptator.hpp"
 #include "openMVG/sfm/sfm_data.hpp"
 
-
-namespace openMVG {
-
-namespace sfm {
-  struct Regions_Provider;
-} // namespace sfm 
+namespace openMVG { namespace sfm { struct Regions_Provider; }
 
 namespace matching_image_collection {
 
@@ -33,7 +33,7 @@ struct GeometricFilter_FMatrix_AC
     double dPrecision = std::numeric_limits<double>::infinity(),
     size_t iteration = 1024)
     : m_dPrecision(dPrecision), m_stIteration(iteration), m_F(Mat3::Identity()),
-      m_dPrecision_robust(std::numeric_limits<double>::infinity()){};
+      m_dPrecision_robust(std::numeric_limits<double>::infinity()){}
 
   /// Robust fitting of the FUNDAMENTAL matrix
   template<typename Regions_or_Features_ProviderT>
@@ -56,7 +56,7 @@ struct GeometricFilter_FMatrix_AC
     // Get corresponding point regions arrays
     //--
 
-    Mat xI,xJ;
+    Mat2X xI,xJ;
     MatchesPairToMat(pairIndex, vec_PutativeMatches, sfm_data, regions_provider, xI, xJ);
 
     //--
@@ -78,7 +78,7 @@ struct GeometricFilter_FMatrix_AC
 
     // Robustly estimate the Fundamental matrix with A Contrario ransac
     const double upper_bound_precision = Square(m_dPrecision);
-    std::vector<size_t> vec_inliers;
+    std::vector<uint32_t> vec_inliers;
     const std::pair<double,double> ACRansacOut =
       ACRANSAC(kernel, vec_inliers, m_stIteration, &m_F, upper_bound_precision);
 
@@ -86,7 +86,7 @@ struct GeometricFilter_FMatrix_AC
       m_dPrecision_robust = ACRansacOut.first;
       // update geometric_inliers
       geometric_inliers.reserve(vec_inliers.size());
-      for ( const size_t & index : vec_inliers)  {
+      for (const uint32_t & index : vec_inliers) {
         geometric_inliers.push_back( vec_PutativeMatches[index] );
       }
       return true;
@@ -123,8 +123,9 @@ struct GeometricFilter_FMatrix_AC
         sfm_data->GetIntrinsics().count(view_J->id_intrinsic) ?
           sfm_data->GetIntrinsics().at(view_J->id_intrinsic).get() : nullptr;
 
-      std::shared_ptr<features::Regions> regionsI = regions_provider->get(iIndex);
-      std::shared_ptr<features::Regions> regionsJ = regions_provider->get(jIndex);
+      const std::shared_ptr<features::Regions>
+        regionsI = regions_provider->get(iIndex),
+        regionsJ = regions_provider->get(jIndex);
 
       // Check the features correspondences that agree in the geometric and photometric domain
       geometry_aware::GuidedMatching

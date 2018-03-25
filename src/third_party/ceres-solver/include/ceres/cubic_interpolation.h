@@ -69,8 +69,6 @@ void CubicHermiteSpline(const Eigen::Matrix<double, kDataDimension, 1>& p0,
                         const double x,
                         double* f,
                         double* dfdx) {
-  DCHECK_GE(x, 0.0);
-  DCHECK_LE(x, 1.0);
   typedef Eigen::Matrix<double, kDataDimension, 1> VType;
   const VType a = 0.5 * (-p0 + 3.0 * p1 - 3.0 * p2 + p3);
   const VType b = 0.5 * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3);
@@ -123,7 +121,7 @@ void CubicHermiteSpline(const Eigen::Matrix<double, kDataDimension, 1>& p0,
 //  double f, dfdx;
 //  interpolator.Evaluator(1.5, &f, &dfdx);
 template<typename Grid>
-class CERES_EXPORT CubicInterpolator {
+class CubicInterpolator {
  public:
   explicit CubicInterpolator(const Grid& grid)
       : grid_(grid) {
@@ -255,7 +253,7 @@ struct Grid1D {
 //  interpolator.Evaluate(1.2, 2.5, &f, &dfdr, &dfdc);
 
 template<typename Grid>
-class CERES_EXPORT BiCubicInterpolator {
+class BiCubicInterpolator {
  public:
   explicit BiCubicInterpolator(const Grid& grid)
       : grid_(grid) {

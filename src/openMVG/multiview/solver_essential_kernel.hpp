@@ -19,6 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
+// This file is part of OpenMVG, an Open Multiple View Geometry C++ library.
 
 // Copyright (c) 2012, 2013 Pierre MOULON.
 
@@ -29,27 +30,15 @@
 #ifndef OPENMVG_MULTIVIEW_SOLVER_ESSENTIAL_KERNEL_HPP
 #define OPENMVG_MULTIVIEW_SOLVER_ESSENTIAL_KERNEL_HPP
 
+#include <vector>
+
 #include "openMVG/multiview/essential.hpp"
 #include "openMVG/multiview/solver_fundamental_kernel.hpp"
 #include "openMVG/multiview/two_view_kernel.hpp"
 
-#include <vector>
-
 namespace openMVG {
 namespace essential {
 namespace kernel {
-
-/**
- * Eight-point algorithm for solving for the essential matrix from normalized
- * image coordinates of point correspondences.
- * See page 294 in HZ Result 11.1.
- *
- */
-struct EightPointRelativePoseSolver {
-  enum { MINIMUM_SAMPLES = 8 };
-  enum { MAX_MODELS = 1 };
-  static void Solve(const Mat &x1, const Mat &x2, std::vector<Mat3> *E);
-};
 
 /**
  * Five-point algorithm to solve the Essential matrix from 5 points
@@ -59,7 +48,7 @@ struct EightPointRelativePoseSolver {
 struct FivePointSolver {
   enum { MINIMUM_SAMPLES = 5 };
   enum { MAX_MODELS = 10 };
-  static void Solve(const Mat &x1, const Mat &x2, std::vector<Mat3> *E);
+  static void Solve(const Mat3X &x1, const Mat3X &x2, std::vector<Mat3> *E);
 };
 
 //-- Generic Solver for the 5pt Essential Matrix Estimation.
@@ -75,35 +64,34 @@ class EssentialKernel :
 public:
   EssentialKernel
   (
-    const Mat &x1,
-    const Mat &x2,
+    const Mat2X &x1,
+    const Mat2X &x2,
     const Mat3 &K1,
     const Mat3 &K2
    ):
     two_view::kernel::Kernel<SolverArg,ErrorArg, ModelArg>(x1,x2),
     K1_(K1),
-    K2_(K2)
+    K2_(K2),
+    bearing_x1_(K1_.inverse() * x1.colwise().homogeneous()),
+    bearing_x2_(K2_.inverse() * x2.colwise().homogeneous())
   {}
 
   void Fit
   (
-    const std::vector<size_t> &samples,
+    const std::vector<uint32_t> &samples,
     std::vector<ModelArg> *models
   )
   const
   {
-    const Mat x1 = ExtractColumns(this->x1_, samples);
-    const Mat x2 = ExtractColumns(this->x2_, samples);
+    const Mat3X
+      x1 = ExtractColumns(this->bearing_x1_, samples),
+      x2 = ExtractColumns(this->bearing_x2_, samples);
 
-    assert(2 == x1.rows());
     assert(SolverArg::MINIMUM_SAMPLES <= x1.cols());
     assert(x1.rows() == x2.rows());
     assert(x1.cols() == x2.cols());
 
-    // Normalize the data (image coords to camera coords).
-    const Mat x1_normalized = (K1_.inverse() * x1.colwise().homogeneous()).colwise().hnormalized();
-    const Mat x2_normalized = (K2_.inverse() * x2.colwise().homogeneous()).colwise().hnormalized();
-    SolverArg::Solve(x1_normalized, x2_normalized, models);
+    SolverArg::Solve(x1, x2, models);
   }
 
   double Error
@@ -119,12 +107,8 @@ public:
   }
 protected:
   Mat3 K1_, K2_; // The two calibrated camera matrices
+  Mat3X bearing_x1_, bearing_x2_;
 };
-
-//-- Solver kernel for the 8pt Essential Matrix Estimation
-using EightPointKernel = essential::kernel::EssentialKernel<EightPointRelativePoseSolver,
-  fundamental::kernel::SampsonError, Mat3>;
-
 
 //-- Solver kernel for the 5pt Essential Matrix Estimation
 using FivePointKernel = essential::kernel::EssentialKernel<FivePointSolver,
